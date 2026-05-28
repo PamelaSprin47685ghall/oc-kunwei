@@ -1,0 +1,5 @@
+node_modules/
+dist/
+src/ollama-web/key.ts
+oh-my-opencode-slim/
+codebuff/
