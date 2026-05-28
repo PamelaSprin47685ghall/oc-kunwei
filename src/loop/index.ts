@@ -136,16 +136,16 @@ class ReviewSessionManager {
     return this.sessions.get(sessionID)?.active === true;
   }
 
+  unlock(sessionID: string): void {
+    const entry = this.sessions.get(sessionID);
+    if (entry) entry.locked = false;
+  }
+
   tryLock(sessionID: string): boolean {
     const entry = this.sessions.get(sessionID);
     if (!entry || entry.locked) return false;
     entry.locked = true;
     return true;
-  }
-
-  unlock(sessionID: string): void {
-    const entry = this.sessions.get(sessionID);
-    if (entry) entry.locked = false;
   }
 
   setPending(sessionID: string, deferred: Deferred<ReviewResult>): void {
@@ -306,15 +306,22 @@ async function runReviewerWithNudge(
   directory?: string,
   abortSignal?: AbortSignal,
 ): Promise<ReviewResult> {
+  if (abortSignal?.aborted) {
+    reviewSessions.delete(childID);
+    return { feedback: 'Review aborted.', terminated: true };
+  }
+
   const deferred = new Deferred<ReviewResult>();
   reviewSessions.setPending(childID, deferred);
-
-  if (abortSignal?.aborted)
-    return { feedback: 'Review aborted.', terminated: true };
 
   let nudgeCount = 0;
 
   while (true) {
+    if (abortSignal?.aborted) {
+      reviewSessions.delete(childID);
+      return { feedback: 'Review aborted.', terminated: true };
+    }
+
     const iterAbort = new AbortController();
     const onOuterAbort = () => iterAbort.abort();
     abortSignal?.addEventListener('abort', onOuterAbort);
@@ -421,65 +428,67 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
         return 'A review is already in progress. Wait for it to finish.';
       }
 
-      const parts: Array<{ type: 'text'; text: string }> = [];
+      try {
+        const parts: Array<{ type: 'text'; text: string }> = [];
 
-      parts.push({
-        type: 'text',
-        text: REVIEW_INSTRUCTIONS,
-      });
-
-      parts.push({
-        type: 'text',
-        text: `=== Change Report ===\n\n${args.report}`,
-      });
-
-      parts.push({
-        type: 'text',
-        text: `=== Affected Files ===\n\n${args.affectedFiles.join('\n')}`,
-      });
-
-      const task = reviewSessions.getTask(sessionID);
-      if (task) {
         parts.push({
           type: 'text',
-          text: `=== Original Task ===\n\n${task}`,
+          text: REVIEW_INSTRUCTIONS,
         });
-      }
 
-      const createResult = await client.session.create({
-        query: { directory },
-        body: {
-          parentID: sessionID,
-          title: 'Reviewer',
-        },
-      });
-      const childID = createResult.data?.id;
-      if (!childID) return 'Failed to create reviewer session';
-      reviewSessions.addChild(sessionID, childID);
+        parts.push({
+          type: 'text',
+          text: `=== Change Report ===\n\n${args.report}`,
+        });
 
-      const result = await runReviewerWithNudge(
-        client,
-        childID,
-        parts,
-        directory,
-        abortSignal,
-      );
+        parts.push({
+          type: 'text',
+          text: `=== Affected Files ===\n\n${args.affectedFiles.join('\n')}`,
+        });
 
-      if (result.feedback == null) {
-        reviewSessions.deactivate(sessionID);
-        return 'Review passed. Your changes have been accepted. loop mode has ended.';
-      }
+        const task = reviewSessions.getTask(sessionID);
+        if (task) {
+          parts.push({
+            type: 'text',
+            text: `=== Original Task ===\n\n${task}`,
+          });
+        }
 
-      if (result.terminated) {
-        reviewSessions.deactivate(sessionID);
-        return `Review terminated: ${result.feedback}`;
-      }
+        const createResult = await client.session.create({
+          query: { directory },
+          body: {
+            parentID: sessionID,
+            title: 'Reviewer',
+          },
+        });
+        const childID = createResult.data?.id;
+        if (!childID) {
+          return 'Failed to create reviewer session';
+        }
+        reviewSessions.addChild(sessionID, childID);
 
-      if (sessionID) {
+        const result = await runReviewerWithNudge(
+          client,
+          childID,
+          parts,
+          directory,
+          abortSignal,
+        );
+
+        if (result.feedback == null) {
+          reviewSessions.deactivate(sessionID);
+          return 'Review passed. Your changes have been accepted. loop mode has ended.';
+        }
+
+        if (result.terminated) {
+          reviewSessions.deactivate(sessionID);
+          return `Review terminated: ${result.feedback}`;
+        }
+
+        return `Review feedback:\n\n${result.feedback}\n\nAddress the feedback above. loop mode is still active — fix the issues and call submit_review again.`;
+      } finally {
         reviewSessions.unlock(sessionID);
       }
-
-      return `Review feedback:\n\n${result.feedback}\n\nAddress the feedback above. loop mode is still active — fix the issues and call submit_review again.`;
     },
   });
 }
@@ -575,11 +584,23 @@ export function getReviewerConfig() {
       reviewer: {
         prompt: 'You are a code reviewer...',
         mode: 'subagent' as const,
+        tools: { basher: true, explorer: true, reverie: true },
         permission: {
-          '*': 'deny',
           read: 'allow',
-          bash: 'allow',
+          bash: 'deny',
+          basher: 'allow',
+          submit_review_result: 'allow',
+          edit: 'deny',
+          write: 'deny',
+          glob: 'deny',
+          grep: 'deny',
+          task: 'deny',
+          explorer: 'allow',
+          editor: 'deny',
+          reverie: 'allow',
+          submit_review: 'deny',
         } as Record<string, unknown>,
+        mcps: ['semble'],
       },
     },
   };

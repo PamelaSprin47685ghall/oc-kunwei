@@ -6,7 +6,21 @@ describe('getReverieConfig', () => {
     const cfg = getReverieConfig();
     expect(cfg.agents.reverie.mode).toBe('subagent');
     expect(cfg.agents.reverie.prompt).toContain('quiet room');
-    expect(cfg.agents.reverie.permission).toEqual({ '*': 'deny' });
+    expect(cfg.agents.reverie.permission).toEqual({
+      bash: 'deny',
+      edit: 'deny',
+      glob: 'deny',
+      grep: 'deny',
+      read: 'deny',
+      task: 'deny',
+      write: 'deny',
+      basher: 'deny',
+      editor: 'deny',
+      explorer: 'deny',
+      reverie: 'deny',
+      submit_review: 'deny',
+      submit_review_result: 'deny',
+    });
   });
 });
 

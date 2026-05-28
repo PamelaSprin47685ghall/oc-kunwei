@@ -48,7 +48,7 @@ export function getExplorerConfig() {
         prompt: EXPLORER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         tools: { basher: true },
-        permission: { '*': 'deny', read: 'allow' } as Record<string, unknown>,
+        permission: { read: 'allow', basher: 'allow', bash: 'deny', edit: 'deny', write: 'deny', glob: 'allow', grep: 'deny', task: 'deny', editor: 'deny', explorer: 'deny', reverie: 'deny', submit_review: 'deny', submit_review_result: 'deny' } as Record<string, unknown>,
         mcps: ['semble'],
       },
     },

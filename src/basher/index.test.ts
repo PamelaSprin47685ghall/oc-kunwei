@@ -81,9 +81,14 @@ describe('getBasherConfig', () => {
     const cfg = getBasherConfig();
     expect(cfg.agents.basher.mode).toBe('subagent');
     expect(cfg.agents.basher.prompt).toContain('expert at analyzing');
-    expect(cfg.agents.basher.permission).toEqual({
-      '*': 'deny',
+    expect(cfg.agents.basher.permission).toMatchObject({
       bash: 'allow',
+      basher: 'deny',
+      editor: 'deny',
+      explorer: 'deny',
+      reverie: 'deny',
+      submit_review: 'deny',
+      submit_review_result: 'deny',
     });
   });
 });

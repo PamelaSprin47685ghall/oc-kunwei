@@ -156,6 +156,21 @@ describe('buildCapitalsContext', () => {
     const result = await buildCapitalsContext(testDir);
     expect(result).toContain('file="ARCHITECTURE/design.md"');
   });
+
+  it('escapes XML-sensitive characters in filenames within ALL_CAPS directories', async () => {
+    write('BUILD/file&name.md', '# Test');
+    write('BUILD/file"name.md', '# Test');
+    write("BUILD/file'name.md", '# Test');
+    write('BUILD/file<lt>.md', '# Test');
+    write('BUILD/file>gt.md', '# Test');
+
+    const result = await buildCapitalsContext(testDir);
+    expect(result).toContain('file="BUILD/file&amp;name.md"');
+    expect(result).toContain('file="BUILD/file&quot;name.md"');
+    expect(result).toContain('file="BUILD/file&apos;name.md"');
+    expect(result).toContain('file="BUILD/file&lt;lt&gt;.md"');
+    expect(result).toContain('file="BUILD/file&gt;gt.md"');
+  });
 });
 
 describe('createCapitalsContextHook', () => {

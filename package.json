@@ -14,7 +14,7 @@
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target node --format esm --external @opencode-ai/plugin --external @opencode-ai/sdk",
     "typecheck": "tsc --noEmit",
-    "test": "bun test caps/",
+    "test": "bun test src/",
     "lint": "bun x biome lint src/",
     "format": "bun x biome format --write src/",
     "check": "bun x biome check --write src/",

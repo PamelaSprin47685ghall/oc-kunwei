@@ -105,7 +105,7 @@ export function getBasherConfig() {
       basher: {
         prompt: BASHER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        permission: { '*': 'deny', bash: 'allow' } as Record<string, unknown>,
+        permission: { bash: 'allow', edit: 'deny', write: 'deny', glob: 'deny', grep: 'deny', task: 'deny', read: 'deny', basher: 'deny', editor: 'deny', explorer: 'deny', reverie: 'deny', submit_review: 'deny', submit_review_result: 'deny' } as Record<string, unknown>,
       },
     },
   };

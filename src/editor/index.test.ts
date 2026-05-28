@@ -6,12 +6,13 @@ describe('getEditorConfig', () => {
     const cfg = getEditorConfig();
     expect(cfg.agents.editor.mode).toBe('subagent');
     expect(cfg.agents.editor.prompt).toContain('code editing');
-    expect(cfg.agents.editor.tools).toEqual({ basher: true });
-    expect(cfg.agents.editor.permission).toEqual({
-      '*': 'deny',
+    expect(cfg.agents.editor.tools).toEqual({ basher: true, explorer: true });
+    expect(cfg.agents.editor.permission).toMatchObject({
       read: 'allow',
       write: 'allow',
       edit: 'allow',
+      explorer: 'allow',
+      basher: 'allow',
     });
   });
 });

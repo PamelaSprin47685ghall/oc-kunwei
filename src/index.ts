@@ -68,6 +68,8 @@ const CapsPlugin: Plugin = async (ctx) => {
                 | undefined
             )?.permission as Record<string, unknown> | undefined),
             bash: 'deny',
+            submit_review: 'allow',
+            submit_review_result: 'deny',
             edit: 'deny',
             write: 'deny',
             glob: 'deny',
@@ -104,7 +106,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         const agent = entry as Record<string, unknown>;
         const perm = ((agent.permission as Record<string, unknown>) ??
           {}) as Record<string, unknown>;
-        if (name === 'explorer') {
+        if (name === 'explorer' || name === 'reviewer') {
           if (!('semble_*' in perm)) perm['semble_*'] = 'allow';
         } else {
           if (!('semble_*' in perm)) perm['semble_*'] = 'deny';
@@ -121,15 +123,27 @@ const CapsPlugin: Plugin = async (ctx) => {
     },
 
     'tool.execute.before': async (
-      input: { tool: string },
+      input: { tool: string; callID: string },
       output: { args?: Record<string, unknown> },
     ): Promise<void> => {
       if (input.tool !== 'bash') return;
       const args = output.args;
       if (!args || typeof args.command !== 'string') return;
-
       const { script } = stripHeadTailPipes(args.command);
       args.command = enforceTimeout(script);
+    },
+
+    'tool.execute.after': async (
+      input: { tool: string; callID: string },
+      output: {
+        output?: unknown;
+        title?: string;
+        metadata?: Record<string, unknown>;
+      },
+    ): Promise<void> => {
+      if (input.tool !== 'bash') return;
+      if (output.title) output.title = 'Command Output';
+      if (output.metadata) output.metadata = {};
     },
 
     'command.execute.before': async (

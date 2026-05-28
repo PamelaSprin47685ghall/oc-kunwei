@@ -102,6 +102,12 @@ export async function promptWithAbort(
 
   try {
     await Promise.race([promptPromise, abortPromise]);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      promptPromise.catch(() => {});
+      throw err;
+    }
+    throw err;
   } finally {
     signal.removeEventListener('abort', onAbort);
   }

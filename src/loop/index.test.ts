@@ -5,6 +5,7 @@ import {
   createSubmitReviewResultTool,
   createSubmitReviewTool,
   Deferred,
+  getReviewerConfig,
   reviewSessions,
 } from './index';
 
@@ -230,6 +231,59 @@ describe('createSubmitReviewTool', () => {
       { sessionID: 'ses-1', directory: '/tmp' },
     );
     expect(result).toContain('already in progress');
+  });
+
+  test('releases lock when reviewer session creation fails', async () => {
+    reviewSessions.activate('ses-1', 'task');
+
+    const ctx = createMockContext();
+    ctx.client.session.create = mock(async () => ({ data: { id: undefined } }));
+
+    const tool = createSubmitReviewTool(ctx);
+    const result = await (tool as any).execute(
+      { report: 'did stuff', affectedFiles: ['a.ts'] },
+      { sessionID: 'ses-1', directory: '/tmp' },
+    );
+
+    expect(result).toContain('Failed to create reviewer session');
+    expect(reviewSessions.isActive('ses-1')).toBe(true);
+    expect(reviewSessions.tryLock('ses-1')).toBe(true);
+  });
+
+  test('releases lock when client.session.create throws', async () => {
+    reviewSessions.activate('ses-1', 'task');
+
+    const ctx = createMockContext();
+    ctx.client.session.create = mock(async () => {
+      throw new Error('Session creation network error');
+    });
+
+    const tool = createSubmitReviewTool(ctx);
+    await expect(
+      (tool as any).execute(
+        { report: 'did stuff', affectedFiles: ['a.ts'] },
+        { sessionID: 'ses-1', directory: '/tmp' },
+      ),
+    ).rejects.toThrow('Session creation network error');
+
+    expect(reviewSessions.isActive('ses-1')).toBe(true);
+    expect(reviewSessions.tryLock('ses-1')).toBe(true);
+  });
+
+  test('reviewer config has basher tool, read/bash permission, and semble MCP', () => {
+    const config = getReviewerConfig();
+    expect(config.agents?.reviewer?.tools?.basher).toBe(true);
+    expect(config.agents?.reviewer?.tools?.explorer).toBe(true);
+    expect(config.agents?.reviewer?.tools?.reverie).toBe(true);
+    expect(config.agents?.reviewer?.permission).toMatchObject({
+      read: 'allow',
+      bash: 'deny',
+      basher: 'allow',
+      submit_review_result: 'allow',
+      explorer: 'allow',
+      reverie: 'allow',
+    });
+    expect(config.agents?.reviewer?.mcps).toContain('semble');
   });
 });
 

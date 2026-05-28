@@ -100,10 +100,19 @@ export async function buildCapitalsContext(
   const parts: string[] = [];
   for (const file of files) {
     parts.push(
-      `<caps-context file="${file.label}">\n${file.content}\n</caps-context>`,
+      `<caps-context file="${escapeXmlAttribute(file.label)}">\n${file.content}\n</caps-context>`,
     );
   }
   return parts.join('\n\n');
+}
+
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 export interface CapitalsContextHook {

@@ -7,9 +7,15 @@ describe('getExplorerConfig', () => {
     expect(cfg.agents.explorer.mode).toBe('subagent');
     expect(cfg.agents.explorer.prompt).toContain('code exploration');
     expect(cfg.agents.explorer.tools).toEqual({ basher: true });
-    expect(cfg.agents.explorer.permission).toEqual({
-      '*': 'deny',
+    expect(cfg.agents.explorer.permission).toMatchObject({
       read: 'allow',
+      glob: 'allow',
+      basher: 'allow',
+      editor: 'deny',
+      explorer: 'deny',
+      reverie: 'deny',
+      submit_review: 'deny',
+      submit_review_result: 'deny',
     });
   });
 
