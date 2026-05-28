@@ -1,5 +1,6 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { extractSessionText } from '../utils/session';
 
 const HEAD_TAIL_PIPE_RE =
   /\s*\|\s*(head|tail)\s+(?:-n\s*|-)\d+(?=\s*(?:[;&\n#]|$))/g;
@@ -51,25 +52,6 @@ ${command}
 
 What to look for:
 ${what}`;
-}
-
-async function extractSessionText(
-  client: PluginInput['client'],
-  sessionId: string,
-): Promise<string> {
-  const result = await client.session.messages({ path: { id: sessionId } });
-  const messages = (result.data ?? []) as Array<{
-    info?: { role?: string };
-    parts?: Array<{ type?: string; text?: string }>;
-  }>;
-  const texts: string[] = [];
-  for (const m of messages) {
-    if (m.info?.role !== 'assistant') continue;
-    for (const p of m.parts ?? []) {
-      if (p.type === 'text' && p.text) texts.push(p.text);
-    }
-  }
-  return texts.join('\n\n');
 }
 
 export function createBasherTool(ctx: PluginInput): ToolDefinition {

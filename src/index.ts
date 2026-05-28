@@ -7,6 +7,7 @@ import {
 } from './basher/index.js';
 import { createEditorTool, getEditorConfig } from './editor/index.js';
 import { createExplorerTool, getExplorerConfig } from './explorer/index.js';
+import { createNudgeTodoHook } from './nudge-todo/index.js';
 import {
   createOllamaWebFetchTool,
   createOllamaWebSearchTool,
@@ -30,6 +31,7 @@ const { agents: reverieAgents } = getReverieConfig();
 
 const CapsPlugin: Plugin = async (ctx) => {
   const capitalsContextHook = createCapitalsContextHook(ctx.directory);
+  const nudgeTodoHook = createNudgeTodoHook(ctx);
   const withReviewCommandManager = createWithReviewCommandManager(ctx);
   const withReviewNudgeHook = createWithReviewNudgeHook(ctx);
 
@@ -93,7 +95,7 @@ const CapsPlugin: Plugin = async (ctx) => {
       input: { sessionID?: string },
       output: { system: string[] },
     ): Promise<void> => {
-      capitalsContextHook.handleSystemTransform(input, output);
+      await capitalsContextHook.handleSystemTransform(input, output);
     },
 
     'tool.execute.before': async (
@@ -116,15 +118,13 @@ const CapsPlugin: Plugin = async (ctx) => {
       },
       output: { parts: Array<{ type: string; text?: string }> },
     ): Promise<void> => {
-      await withReviewCommandManager.handleCommandExecuteBefore(
-        input,
-        output,
-      );
+      await withReviewCommandManager.handleCommandExecuteBefore(input, output);
     },
 
     event: async (input: {
       event: { type: string; properties?: Record<string, unknown> };
     }): Promise<void> => {
+      await nudgeTodoHook.handleEvent(input);
       await withReviewNudgeHook.handleEvent(input);
     },
   };

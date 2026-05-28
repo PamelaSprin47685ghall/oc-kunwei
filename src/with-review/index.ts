@@ -1,5 +1,6 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { extractSessionText } from '../utils/session';
 
 const COMMAND_NAME = 'with-review';
 const INTERNAL_MARKER = '<!-- CAPS_INTERNAL_INITIATOR -->';
@@ -91,25 +92,6 @@ function createInternalAgentTextPart(text: string): {
   text: string;
 } {
   return { type: 'text', text: `${text}\n${INTERNAL_MARKER}` };
-}
-
-async function extractSessionText(
-  client: PluginInput['client'],
-  sessionId: string,
-): Promise<string> {
-  const result = await client.session.messages({ path: { id: sessionId } });
-  const messages = (result.data ?? []) as Array<{
-    info?: { role?: string };
-    parts?: Array<{ type?: string; text?: string }>;
-  }>;
-  const texts: string[] = [];
-  for (const m of messages) {
-    if (m.info?.role !== 'assistant') continue;
-    for (const p of m.parts ?? []) {
-      if (p.type === 'text' && p.text) texts.push(p.text);
-    }
-  }
-  return texts.join('\n\n');
 }
 
 export function createWithReviewCommandManager(_ctx: PluginInput) {

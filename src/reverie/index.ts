@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { extractSessionText } from '../utils/session';
 
 const REVERIE_SYSTEM_PROMPT =
   'You are in a quiet room with the texts and the question.\n' +
@@ -9,25 +10,6 @@ const REVERIE_SYSTEM_PROMPT =
   '\n' +
   'Read carefully. Turn it over in your mind.\n' +
   'When you are ready, answer with clarity and depth.';
-
-async function extractSessionText(
-  client: PluginInput['client'],
-  sessionId: string,
-): Promise<string> {
-  const result = await client.session.messages({ path: { id: sessionId } });
-  const messages = (result.data ?? []) as Array<{
-    info?: { role?: string };
-    parts?: Array<{ type?: string; text?: string }>;
-  }>;
-  const texts: string[] = [];
-  for (const m of messages) {
-    if (m.info?.role !== 'assistant') continue;
-    for (const p of m.parts ?? []) {
-      if (p.type === 'text' && p.text) texts.push(p.text);
-    }
-  }
-  return texts.join('\n\n');
-}
 
 export function createReverieTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;

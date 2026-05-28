@@ -1,10 +1,12 @@
-import fs from 'node:fs';
+import type { Stats } from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const CAPS_FILE_RE = /^[A-Z][A-Z0-9_]*\.md$/;
 const CAPS_DIR_RE = /^[A-Z][A-Z0-9_]*$/;
 const EXCLUDED_FILE_NAMES = new Set(['AGENTS.md', 'CLAUDE.md', 'README.md']);
 const EXCLUDED_DIR_NAMES = new Set(['AGENTS', 'CLAUDE', 'NODE_MODULES']);
+const MAX_FILE_SIZE = 1_048_576;
 
 export interface CapsFileInfo {
   filePath: string;
@@ -12,12 +14,14 @@ export interface CapsFileInfo {
   content: string;
 }
 
-export function findCapsFiles(projectRoot: string): CapsFileInfo[] {
+export async function findCapsFiles(
+  projectRoot: string,
+): Promise<CapsFileInfo[]> {
   const results: CapsFileInfo[] = [];
 
   let rootEntries: string[];
   try {
-    rootEntries = fs.readdirSync(projectRoot);
+    rootEntries = await fs.readdir(projectRoot);
   } catch {
     return results;
   }
@@ -26,33 +30,20 @@ export function findCapsFiles(projectRoot: string): CapsFileInfo[] {
     const fullPath = path.join(projectRoot, entry);
 
     if (CAPS_FILE_RE.test(entry) && !EXCLUDED_FILE_NAMES.has(entry)) {
-      try {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        if (content.trim()) {
-          results.push({ filePath: fullPath, label: entry, content });
-        }
-      } catch {
-        // skip unreadable files
-      }
+      const info = await tryReadFile(fullPath, entry);
+      if (info) results.push(info);
     }
 
     if (CAPS_DIR_RE.test(entry) && !EXCLUDED_DIR_NAMES.has(entry)) {
-      const stat = tryStat(fullPath);
+      const stat = await tryStat(fullPath);
       if (stat?.isDirectory()) {
-        const dirFiles = discoverFilesInDir(fullPath);
+        const dirFiles = await discoverFilesInDir(fullPath);
         for (const filePath of dirFiles) {
-          try {
-            const content = fs.readFileSync(filePath, 'utf-8');
-            if (content.trim()) {
-              results.push({
-                filePath,
-                label: path.relative(projectRoot, filePath),
-                content,
-              });
-            }
-          } catch {
-            // skip unreadable files
-          }
+          const info = await tryReadFile(
+            filePath,
+            path.relative(projectRoot, filePath),
+          );
+          if (info) results.push(info);
         }
       }
     }
@@ -62,24 +53,40 @@ export function findCapsFiles(projectRoot: string): CapsFileInfo[] {
   return results;
 }
 
-function tryStat(p: string): fs.Stats | undefined {
+async function tryReadFile(
+  filePath: string,
+  label: string,
+): Promise<CapsFileInfo | undefined> {
   try {
-    return fs.statSync(p);
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) return undefined;
+    if (stat.size > MAX_FILE_SIZE) return undefined;
+    const content = await fs.readFile(filePath, 'utf-8');
+    if (!content.trim()) return undefined;
+    return { filePath, label, content };
   } catch {
     return undefined;
   }
 }
 
-function discoverFilesInDir(dirPath: string): string[] {
+async function tryStat(p: string): Promise<Stats | undefined> {
+  try {
+    return await fs.stat(p);
+  } catch {
+    return undefined;
+  }
+}
+
+async function discoverFilesInDir(dirPath: string): Promise<string[]> {
   const files: string[] = [];
   try {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isFile()) {
         files.push(fullPath);
       } else if (entry.isDirectory()) {
-        files.push(...discoverFilesInDir(fullPath));
+        files.push(...(await discoverFilesInDir(fullPath)));
       }
     }
   } catch {
@@ -88,8 +95,10 @@ function discoverFilesInDir(dirPath: string): string[] {
   return files;
 }
 
-export function buildCapitalsContext(projectRoot: string): string {
-  const files = findCapsFiles(projectRoot);
+export async function buildCapitalsContext(
+  projectRoot: string,
+): Promise<string> {
+  const files = await findCapsFiles(projectRoot);
   if (files.length === 0) return '';
 
   const parts: string[] = [];
@@ -105,7 +114,7 @@ export interface CapitalsContextHook {
   handleSystemTransform: (
     input: { sessionID?: string },
     output: { system: string[] },
-  ) => void;
+  ) => Promise<void>;
 }
 
 export function createCapitalsContextHook(
@@ -114,12 +123,12 @@ export function createCapitalsContextHook(
   let cachedContext: string | null = null;
 
   return {
-    handleSystemTransform(
+    async handleSystemTransform(
       _input: { sessionID?: string },
       output: { system: string[] },
-    ): void {
+    ): Promise<void> {
       if (cachedContext === null) {
-        cachedContext = buildCapitalsContext(projectRoot);
+        cachedContext = await buildCapitalsContext(projectRoot);
       }
       if (!cachedContext) return;
 

@@ -3,6 +3,18 @@ import { tool } from '@opencode-ai/plugin/tool';
 
 import { OLLAMA_API_KEY } from './key';
 
+function validateUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return `Unsupported protocol: ${parsed.protocol}. Only http: and https: are allowed.`;
+    }
+    return undefined;
+  } catch {
+    return `Invalid URL: ${url}`;
+  }
+}
+
 const OLLAMA_API_BASE = 'https://ollama.com/api';
 
 export function createOllamaWebSearchTool(): ToolDefinition {
@@ -110,6 +122,9 @@ export function createOllamaWebFetchTool(): ToolDefinition {
       },
       context: { abort: AbortSignal },
     ) => {
+      const validationError = validateUrl(args.url);
+      if (validationError) return validationError;
+
       try {
         const response = await fetch(`${OLLAMA_API_BASE}/web_fetch`, {
           method: 'POST',

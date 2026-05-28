@@ -1,7 +1,7 @@
 {
   "name": "caps-context",
   "version": "0.1.0",
-  "description": "OpenCode plugin: inject ALL_CAPS context files into system prompts",
+  "description": "OpenCode plugin: basher, editor, explorer, reverie, nudge-todo, ollama-web, refer-caps, with-review",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

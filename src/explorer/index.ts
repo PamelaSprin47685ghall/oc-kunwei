@@ -1,30 +1,12 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { extractSessionText } from '../utils/session';
 
 const EXPLORER_SYSTEM_PROMPT =
   'You are a code exploration agent. Given a search query, use semble_search to find relevant code in the workspace. ' +
   'Read the relevant files and provide a detailed summary of what you found, including file paths and key code sections. ' +
   'You have access to basher for read-only exploration commands (e.g., listing files, checking git status). ' +
   'Do NOT use basher to modify files — if you need to make changes, stop and report back.';
-
-async function extractSessionText(
-  client: PluginInput['client'],
-  sessionId: string,
-): Promise<string> {
-  const result = await client.session.messages({ path: { id: sessionId } });
-  const messages = (result.data ?? []) as Array<{
-    info?: { role?: string };
-    parts?: Array<{ type?: string; text?: string }>;
-  }>;
-  const texts: string[] = [];
-  for (const m of messages) {
-    if (m.info?.role !== 'assistant') continue;
-    for (const p of m.parts ?? []) {
-      if (p.type === 'text' && p.text) texts.push(p.text);
-    }
-  }
-  return texts.join('\n\n');
-}
 
 export function createExplorerTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;
