@@ -33,7 +33,7 @@ export function stripHeadTailPipes(script: string): StripResult {
 
 export function enforceTimeout(command: string): string {
   const escaped = command.replace(/'/g, "'\\''");
-  return `timeout 1 bash -c '${escaped}'`;
+  return `timeout 5 bash -c '${escaped}'`;
 }
 
 const BASHER_SYSTEM_PROMPT = `You are an expert at analyzing the output of a terminal command.
@@ -65,7 +65,7 @@ export function createBasherTool(ctx: PluginInput): ToolDefinition {
     description:
       'Executes a bash command and returns a natural-language summary. ' +
       'MUST provide "command" and "what_to_summarize". ' +
-      'The bash command has a 1-second timeout enforced by timeout(1). ' +
+      'The bash command has a 5-second timeout enforced by timeout(1). ' +
       'Do NOT wrap the command with timeout(1) manually — it is added automatically. ' +
       'For longer-running commands, use tmux to run them asynchronously.',
 
