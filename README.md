@@ -5,430 +5,430 @@
 [![Bun](https://img.shields.io/badge/Bun-≥1.3-black)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org)
 
-**oc-kunwei** is an [opencode](https://opencode.ai) plugin that provides a curated set of tools, specialized subagents, and workflow commands for structured, review-gated development. It implements a **least-privilege subagent delegation** architecture where the orchestrator never touches files or runs commands directly — all work is delegated to purpose-built subagents with minimal permissions.
+**oc-kunwei** 是一个 [opencode](https://opencode.ai) 插件，提供一套精选工具、专用子代理（subagent）和工作流命令，用于结构化、循环门控（loop-gated）的开发流程。它实现了**最小权限子代理委派**架构——编排器（orchestrator）从不直接操作文件或执行命令，所有工作都委派给拥有最小权限的专用子代理完成。
 
 ---
 
-## Why oc-kunwei?
+## 为什么选择 oc-kunwei？
 
-### 🛡️ Least-Privilege Subagent Delegation
+### 🛡️ 最小权限子代理委派
 
-The orchestrator agent (the main LLM conversation) has all dangerous capabilities revoked — no `bash`, no `edit`, no `write`, no `glob`, no `grep`. Instead, it delegates every operation to a specialized subagent via a dedicated child session:
+编排器代理（主 LLM 会话）被剥夺了所有危险能力——没有 `bash`、`edit`、`write`、`glob`、`grep`。取而代之的是，它通过专用子会话将每个操作委派给专门的子代理：
 
-| Subagent | Can Do | Cannot Do |
+| 子代理 | 可执行操作 | 不可执行操作 |
 |----------|--------|-----------|
-| **basher** | Run bash commands (with `timeout 1`) | Read/write files, edit code |
-| **editor** | Read, write, edit files + run bash | Access semblle, web, or review tools |
-| **explorer** | Read files + semblle semantic search + bash | Write or edit any file |
-| **reverie** | Pure text thinking — no tools at all | Use any tool |
+| **basher** | 运行 bash 命令（带 `timeout 5`） | 读/写文件、编辑代码 |
+| **editor** | 读、写、编辑文件 + 运行 bash | 访问 semblle、web 或 review 工具 |
+| **explorer** | 读取文件 + semblle 语义搜索 + bash | 写入或编辑任何文件 |
+| **reverie** | 纯文本思考——无任何工具 | 使用任何工具 |
 
-This means the orchestrator can only orchestrate. It must explicitly choose which subagent to invoke, making every operation deliberate and auditable.
+这意味着编排器只能进行编排。它必须明确选择调用哪个子代理，使每个操作都经过深思熟虑且可审计。
 
-### ✅ Review-Gated Development
+### ✅ 循环门控开发（Loop-Gated Development）
 
-The `/loop` command activates a one-shot review gate: the LLM works on a task, submits a report via `submit_review`, and a dedicated reviewer agent (sandboxed in the explorer agent) evaluates the work against eight rigorous criteria. The result is either **accepted** (feedback is `null`) or **rejected** with specific, actionable feedback.
+`/loop` 命令激活一次性循环门控（one-shot loop gate）：LLM 处理任务，通过 `submit_review` 提交报告，专用的审查员代理（沙箱化在 explorer 代理中）根据八条严格标准评估工作。结果为**通过**（`feedback` 为 `null`）或**拒绝**（附带具体的可操作反馈）。
 
-### 📄 Context Injection via CAPS Files
+### 📄 通过 CAPS 文件注入上下文
 
-The `experimental.chat.system.transform` hook automatically discovers and injects `*_CAPS.md` files (or files inside `*_CAPS/` directories) at the project root into the system prompt. This allows teams to define project-wide conventions, architecture guidelines, or API contracts as plain markdown files that are always present in the LLM's context — without cluttering individual prompts.
+`experimental.chat.system.transform` 钩子自动发现项目根目录下的 `*_CAPS.md` 文件（或 `*_CAPS/` 目录内的文件），并将其内容注入系统提示词。这允许团队将项目级约定、架构指南或 API 契约定义为纯 Markdown 文件，这些文件始终存在于 LLM 的上下文中——而无需污染单个提示词。
 
 ---
 
-## Tools
+## 工具
 
 ### `basher`
 
-Execute shell commands via a dedicated basher sub-session. The orchestrator cannot run bash directly — it must go through this tool.
+通过专用的 basher 子会话执行 Shell 命令。编排器不能直接运行 bash——必须通过此工具。
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `command` | `string` | ✅ | The bash command to execute. Do **not** wrap with `timeout(1)` — it is added automatically. |
-| `what_to_summarize` | `string` | ✅ | Describes what to look for in the output. Be specific to get a focused natural-language summary. |
+| `command` | `string` | ✅ | 要执行的 bash 命令。**不要**手动包裹 `timeout(5)`——系统会自动添加。 |
+| `what_to_summarize` | `string` | ✅ | 描述在输出中需要关注的内容。请具体说明，以便获得精准的自然语言总结。 |
 
-The tool:
-1. Strips any `| head -n N` / `| tail -N` pipes (these are common LLM artifacts that interfere with command output).
-2. Wraps the command as `timeout 1 bash -c '...'` to enforce a 1-second hard limit.
-3. Spawns a **basher** subagent child session.
-4. Returns a natural-language summary, not the raw output.
+该工具：
+1. 去除 `| head -n N` / `| tail -N` 管道（这些是常见的 LLM 产物，会干扰命令输出）。
+2. 将命令包裹为 `timeout 5 bash -c '...'`，强制 5 秒硬限制。
+3. 启动一个 **basher** 子代理子会话。
+4. 返回自然语言总结，而非原始输出。
 
-> **Restriction:** The `bash` built-in tool is denied for the orchestrator. All shell execution must go through `basher`.
+> **限制：** 编排器被禁止使用 `bash` 内置工具。所有 Shell 执行必须通过 `basher`。
 
 ---
 
 ### `editor`
 
-Delegates a code editing task to a dedicated editor subagent.
+将代码编辑任务委派给专用的 editor 子代理。
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `task` | `string` | ✅ | Detailed description of the editing task — include file paths, specific changes, and any relevant context. |
+| `task` | `string` | ✅ | 编辑任务的详细描述——包括文件路径、具体变更和相关上下文。 |
 
-The editor subagent can:
-- Read files (`read`)
-- Write new files (`write`)
-- Edit existing files (`edit`)
-- Run commands via `basher` (e.g., `npm test`, `bun run build`)
+editor 子代理可以：
+- 读取文件（`read`）
+- 写入新文件（`write`）
+- 编辑已有文件（`edit`）
+- 通过 `basher` 运行命令（例如 `npm test`、`bun run build`）
 
-It **cannot** use web search, semblle, or review tools.
+它**不能**使用 Web 搜索、semble 或 review 工具。
 
 ---
 
 ### `explorer`
 
-Perform semantic code search using semblle MCP and read-only exploration.
+使用 semblle MCP 执行语义代码搜索和只读探索。
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `query` | `string` | ✅ | Natural-language search query describing the code to find (e.g., "Where is the authentication middleware defined?"). |
+| `query` | `string` | ✅ | 描述要查找代码的自然语言搜索查询（例如"认证中间件在哪里定义？"）。 |
 
-The explorer subagent has:
-- `read` permission (can read file contents)
-- `basher` tool for read-only commands (listing files, git status, etc.)
-- **semble** MCP for semantic code search
-- `write` and `edit` are **denied** — it cannot modify files
+explorer 子代理拥有：
+- `read` 权限（可读取文件内容）
+- `basher` 工具用于只读命令（列出文件、git status 等）
+- **semble** MCP 用于语义代码搜索
+- `write` 和 `edit` 被**拒绝**——不能修改文件
 
-> **Note:** The explorer's system prompt explicitly warns against using `basher` to modify files. If changes are needed, it must report back rather than act.
+> **注意：** explorer 的系统提示词明确警告不要使用 `basher` 修改文件。如需修改，必须报告而非直接操作。
 
 ---
 
 ### `reverie`
 
-A tool-free contemplation sub-session for deep thinking. No commands, no search, no file access — just the question and the provided files.
+一个无工具的沉思子会话，用于深度思考。没有命令、没有搜索、没有文件访问——只有问题和提供的文件。
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `question` | `string` | ✅ | The question to contemplate. The harder, the better. |
-| `files` | `string[]` | ✅ | File paths to provide as context. Contents are read and embedded in the prompt. |
+| `question` | `string` | ✅ | 需要深思的问题。越难越好。 |
+| `files` | `string[]` | ✅ | 作为上下文提供的文件路径。系统会读取文件内容并将其嵌入提示词。 |
 
-The reverie agent has **no tools** at all. Its system prompt sets the scene: *"No tools, no distractions — just you and the problem."* Use this for design decisions, bug analysis, code review preparation, or any situation that benefits from undistracted reasoning.
+reverie 代理**没有任何工具**。其系统提示词设定了场景：*"没有工具，没有干扰——只有你和问题。"* 适用于设计决策、Bug 分析、代码审查准备或任何受益于无干扰推理的场景。
 
 ---
 
 ### `websearch`
 
-Search the web via the ollama.com API.
+通过 ollama.com API 搜索 Web。
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `query` | `string` | ✅ | Natural language search query. Describe the ideal page, not keywords. |
-| `numResults` | `number` | ❌ | Number of search results to return (default: `10`). |
+| `query` | `string` | ✅ | 自然语言搜索查询。请描述理想页面，而非关键词。 |
+| `numResults` | `number` | ❌ | 返回的搜索结果数量（默认：`10`）。 |
 
-**Query tips:**
-- `"blog post comparing React and Vue performance"` — not `"React vs Vue"`
-- `"category:people John Doe"` — search LinkedIn profiles
-- `"category:company Acme Corp"` — search companies
+**查询技巧：**
+- `"blog post comparing React and Vue performance"` ——而非 `"React vs Vue"`
+- `"category:people John Doe"` ——搜索 LinkedIn 个人资料
+- `"category:company Acme Corp"` ——搜索公司
 
 ---
 
 ### `webfetch`
 
-Fetch a URL with intelligent content extraction via the ollama.com API.
+通过 ollama.com API 获取 URL 并进行智能内容提取。
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `url` | `string` | ✅ | The URL to fetch (http: and https: only). |
-| `extract_main` | `boolean` | ❌ | Extract main content, removing navigation and ads (default: `true`). |
-| `prefer_llms_txt` | `"auto"` \| `"always"` \| `"never"` | ❌ | Probe for `llms.txt` files before fetching full page (default: `auto`). |
-| `prompt` | `string` | ❌ | Optional extraction task processed by a cheap secondary model. |
-| `timeout` | `number` | ❌ | Timeout in seconds (max: `120`). |
+| `url` | `string` | ✅ | 要获取的 URL（仅支持 http: 和 https:）。 |
+| `extract_main` | `boolean` | ❌ | 提取主要内容，移除导航和广告（默认：`true`）。 |
+| `prefer_llms_txt` | `"auto"` \| `"always"` \| `"never"` | ❌ | 在获取完整页面前探测 `llms.txt` 文件（默认：`auto`）。 |
+| `prompt` | `string` | ❌ | 可选的提取任务，由廉价辅助模型处理。 |
+| `timeout` | `number` | ❌ | 超时秒数（最大：`120`）。 |
 
-Returns: title, byline, content length, and the extracted content.
+返回：标题、作者行、内容长度和提取的内容。
 
 ---
 
 ### `submit_review`
 
-Submit work for review. **Only available during `/loop` mode.**
+提交工作以供审查。**仅在 `/loop` 模式下可用。**
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `report` | `string` | ✅ | Detailed report of what was done and why. |
-| `affectedFiles` | `string[]` | ✅ | List of every file path that was modified or created. |
+| `report` | `string` | ✅ | 已完成工作及其理由的详细报告。 |
+| `affectedFiles` | `string[]` | ✅ | 修改或创建的每个文件的路径列表。 |
 
-Once called, a reviewer sub-session is spawned (using the explorer agent with the addition of `submit_review_result`). The reviewer evaluates the work and submits a verdict.
+调用后，会生成一个审查员子会话（使用 explorer 代理，并额外添加 `submit_review_result` 工具）。审查员评估工作并提交判决。
 
 ---
 
 ### `submit_review_result`
 
-The reviewer's tool for submitting a verdict. **Only available to the reviewer sub-session.**
+审查员提交判决的工具。**仅对审查员子会话可用。**
 
-| Parameter | Type | Required | Description |
+| 参数 | 类型 | 必填 | 描述 |
 |-----------|------|----------|-------------|
-| `feedback` | `string` \| `null` | ✅ | `null` = **accept**. Non-null string = **reject** with specific actionable feedback. |
+| `feedback` | `string` \| `null` | ✅ | `null` = **通过**。非 null 字符串 = **拒绝**并附带具体的可操作反馈。 |
 
-> **Important:** If accepting, `feedback` must be exactly `null`. Any text — including praise — is treated as rejection feedback.
+> **重要：** 如果通过，`feedback` 必须精确为 `null`。任何文本——包括赞美——都将被视为拒绝反馈。
 
 ---
 
-## Commands
+## 命令
 
-| Command | Description |
+| 命令 | 描述 |
 |---------|-------------|
-| **`/loop <task>`** | Activates one-shot review-gated mode. Rewrites the task into a structured prompt that tells the LLM to complete the work and then call `submit_review`. The mode ends after the review is resolved. |
+| **`/loop <task>`** | 激活一次性循环门控模式。将任务重写为结构化提示词，指示 LLM 完成任务后调用 `submit_review`。审查完成后模式结束。 |
 
 ---
 
-## Agents
+## 代理
 
-### Orchestrator (Foreground)
+### 编排器（前台 Orchestrator）
 
-- **Tools available:** `basher`, `editor`, `explorer`
-- **Explicitly denied:** `bash`, `edit`, `write`, `glob`, `grep`
-- **semble permission:** `deny` (cannot use semblle directly — must use `explorer`)
-- **Purpose:** The main conversation agent. It orchestrates work by delegating to subagents. It can think, plan, and call specialized tools, but it cannot touch files or run shell commands directly.
+- **可用工具：** `basher`、`editor`、`explorer`
+- **明确禁止：** `bash`、`edit`、`write`、`glob`、`grep`
+- **semble 权限：** `deny`（不能直接使用 semblle——必须通过 `explorer`）
+- **目的：** 主会话代理。通过委派给子代理来编排工作。可以思考、计划和调用专用工具，但不能接触文件或直接运行 Shell 命令。
 
-### basher (Subagent)
+### basher（子代理）
 
-- **Mode:** `subagent`
-- **Tools:** `bash` (only)
-- **Permissions:** `*: deny`, `bash: allow`
-- **semble permission:** `deny`
-- **System prompt:** Expert at analyzing terminal output. Returns natural-language summaries.
-- **Purpose:** Execute shell commands with `timeout 1` enforcement and pipe stripping. Summarizes output in natural language.
+- **模式：** `subagent`
+- **工具：** 仅 `bash`
+- **权限：** `*: deny`、`bash: allow`
+- **semble 权限：** `deny`
+- **系统提示词：** 精通分析终端输出的专家。返回自然语言总结。
+- **目的：** 执行 Shell 命令，强制 `timeout 5` 并去除管道。以自然语言总结输出。
 
-### editor (Subagent)
+### editor（子代理）
 
-- **Mode:** `subagent`
-- **Tools:** `basher` (explicitly enabled)
-- **Permissions:** `*: deny`, `read: allow`, `write: allow`, `edit: allow`
-- **semble permission:** `deny`
-- **System prompt:** Code editing assistant — reads files, edits files, writes new files, runs commands.
-- **Purpose:** Perform file modifications. Can read, edit, write, and run verification commands.
+- **模式：** `subagent`
+- **工具：** 明确启用 `basher`
+- **权限：** `*: deny`、`read: allow`、`write: allow`、`edit: allow`
+- **semble 权限：** `deny`
+- **系统提示词：** 代码编辑助手——读取文件、编辑文件、写入新文件、运行命令。
+- **目的：** 执行文件修改。可以读取、编辑、写入文件并运行验证命令。
 
-### explorer (Subagent)
+### explorer（子代理）
 
-- **Mode:** `subagent`
-- **Tools:** `basher` (explicitly enabled)
-- **Permissions:** `*: deny`, `read: allow`
-- **semble permission:** `allow` (the only agent with semblle access)
-- **MCPs:** `semble`
-- **System prompt:** Code exploration agent. Uses semblle for semantic search. Reads files for context. WARNED against modifying files.
-- **Purpose:** Read-only code exploration and semantic search. Used as the base for the reviewer agent.
+- **模式：** `subagent`
+- **工具：** 明确启用 `basher`
+- **权限：** `*: deny`、`read: allow`
+- **semble 权限：** `allow`（唯一拥有 semble 访问权限的代理）
+- **MCP：** `semble`
+- **系统提示词：** 代码探索代理。使用 semble 进行语义搜索。读取文件以获取上下文。**明确警告不要修改文件。**
+- **目的：** 只读代码探索和语义搜索。用作审查员代理的基础。
 
-### reverie (Subagent)
+### reverie（子代理）
 
-- **Mode:** `subagent`
-- **Tools:** *(none)*
-- **Permissions:** None granted
-- **System prompt:** Quiet contemplation — no tools, no distractions.
-- **Purpose:** Pure text-based deep thinking. No tools available at all.
+- **模式：** `subagent`
+- **工具：** *（无）*
+- **权限：** 未授予任何权限
+- **系统提示词：** 安静沉思——没有工具，没有干扰。
+- **目的：** 纯文本深度思考。没有任何可用工具。
 
-### reviewer (Reuses explorer)
+### 审查员（复用 explorer）
 
-- **Mode:** subagent (spawned dynamically)
-- **Base agent:** `explorer` (inherits all its tools and permissions)
-- **Additional tool:** `submit_review_result`
-- **System prompt:** Rigorous code reviewer with eight evaluation criteria (see Workflow section).
-- **Purpose:** Review submitted work and return a structured verdict. Nudged up to 3 times if it ends without calling `submit_review_result`.
+- **模式：** subagent（动态生成）
+- **基础代理：** `explorer`（继承其所有工具和权限）
+- **额外工具：** `submit_review_result`
+- **系统提示词：** 严格的代码审查员，拥有八条评估标准（见工作流一节）。
+- **目的：** 审查提交的工作并返回结构化判决。如果未调用 `submit_review_result` 而结束，最多被提示 3 次。
 
 ---
 
-## Hooks
+## 钩子（Hooks）
 
-### `tool.execute.before` (bash interception)
+### `tool.execute.before`（bash 拦截）
 
-| Trigger | Action |
+| 触发条件 | 操作 |
 |---------|--------|
-| Any `bash` tool execution | 1. Strips `\| head\|tail` pipes (common LLM hallucination artifacts). 2. Wraps the command in `timeout 1 bash -c '...'` to enforce a 1-second hard limit. |
+| 任何 `bash` 工具的执行 | 1. 去除 `\| head\|tail` 管道（常见的 LLM 幻觉产物）。2. 将命令包裹为 `timeout 5 bash -c '...'`，强制 5 秒硬限制。 |
 
-This hook runs on every `bash` invocation, including those from subagents. The pipe-stripping logic is recursive — multiple pipes are all removed, and each removal is recorded for diagnostics.
+此钩子在每次 `bash` 调用时运行，包括来自子代理的调用。管道去除逻辑是递归的——多个管道都会被移除，每次移除都会被记录用于诊断。
 
-### `command.execute.before` (`/loop` interception)
+### `command.execute.before`（`/loop` 拦截）
 
-| Trigger | Action |
+| 触发条件 | 操作 |
 |---------|--------|
-| User types `/loop <task>` | Intercepts the command, flags the session as review-gated, and rewrites the prompt into a structured instruction: "Complete the task, then call `submit_review` with a report and affected files list. A reviewer will examine your submission." |
+| 用户输入 `/loop <task>` | 拦截命令，将会话标记为循环门控模式，将提示词重写为结构化指令："完成任务，然后调用 `submit_review`，附带报告和受影响的文件列表。审查员将检查你的提交。" |
 
-The command registration in `opencodeConfig` sets up `/loop` as a proper opencode command with description and template.
+命令注册在 `opencodeConfig` 中，将 `/loop` 设置为带有描述和模板的正式 opencode 命令。
 
-### `event` (session.idle — nudge hooks)
+### `event`（session.idle——提示钩子）
 
-Two independent nudge hooks run on idle events:
+两个独立的提示钩子在空闲事件时运行：
 
-| Hook | Condition | Action |
+| 钩子 | 条件 | 操作 |
 |------|-----------|--------|
-| **nudge-todo** | Session is idle AND there are incomplete todos (not `completed` or `cancelled`) | Prompts the LLM: *"There are still incomplete todos. Continue working through the remaining items."* |
-| **loop nudge** | Session is idle AND session is in `/loop` mode AND there are **no** open todos (todos take priority) | Prompts the LLM: *"You must call `submit_review` before finishing."* |
+| **nudge-todo** | 会话空闲且存在未完成的 todo（未标记为 `completed` 或 `cancelled`） | 提示 LLM：*"还有未完成的 todo。请继续处理剩余项。"* |
+| **loop nudge** | 会话空闲且处于 `/loop` 模式且**没有**未关闭的 todo（todo 优先） | 提示 LLM：*"你必须在结束前调用 `submit_review`。"* |
 
-The loop nudge runs **only** if todos are complete — incomplete todos suppress the review nudge. Both nudges have a 5-second suppression window after an abort error.
+循环提示仅在 todo 全部完成后运行——未完成的 todo 会抑制审查提示。两个钩子在中止错误后都有 5 秒的抑制窗口。
 
-### `experimental.chat.system.transform` (CAPS context injection)
+### `experimental.chat.system.transform`（CAPS 上下文注入）
 
-| Trigger | Action |
+| 触发条件 | 操作 |
 |---------|--------|
-| Every chat initialization | Discovers all `*_CAPS.md` files (or files inside `*_CAPS/` directories) at the project root, reads their content, and appends them to the system prompt wrapped in `<caps-context>` tags. |
+| 每次聊天初始化 | 发现项目根目录下所有 `*_CAPS.md` 文件（或 `*_CAPS/` 目录内的文件），读取其内容，并将其追加到系统提示词中，包裹在 `<caps-context>` 标签内。 |
 
-**File discovery rules:**
-- Matches files matching `^[A-Z][A-Z0-9_]*\.md$` at the project root.
-- Also scans directories matching `^[A-Z][A-Z0-9_]*$` recursively for all files.
-- Excludes `AGENTS.md`, `CLAUDE.md`, `README.md`, and `NODE_MODULES/`.
-- Skips files larger than 1 MB or with empty content.
-- Results are sorted alphabetically and **cached** after the first build.
+**文件发现规则：**
+- 匹配项目根目录下符合 `^[A-Z][A-Z0-9_]*\.md$` 的文件。
+- 同时递归扫描符合 `^[A-Z][A-Z0-9_]*$` 目录下的所有文件。
+- 排除 `AGENTS.md`、`CLAUDE.md`、`README.md` 和 `NODE_MODULES/`。
+- 跳过大于 1 MB 或内容为空的文件。
+- 结果按字母顺序排序，首次构建后**缓存**。
 
 ---
 
-## Workflow: `/loop` Deep Dive
+## 工作流：`/loop` 深度解析
 
-### Evaluation Criteria
+### 评估标准
 
-The reviewer evaluates submissions against eight criteria:
+审查员根据八条标准评估提交：
 
-1. **Language & algorithms** — correct use of language features, algorithms, and data structures.
-2. **Simplicity** — is the implementation no more complex than necessary? Every line is a liability.
-3. **Structure** — elegant program structure, higher-order functions, clear separation of concerns.
-4. **File & function size** — no oversized files, overly long functions, or spaghetti code.
-5. **Testing** — are unit tests present? Are integration tests needed?
-6. **Design & correctness** — design flaws, mathematical errors, logical contradictions, architecture issues.
-7. **API usability** — from the caller's perspective: is the API intuitive and elegant?
-8. **Requirements** — does it fully satisfy the requirements? No cutting corners.
+1. **语言与算法**——正确使用语言特性、算法和数据结构。
+2. **简洁性**——实现是否比必要更复杂？每一行代码都是潜在风险。
+3. **结构**——优雅的程序结构、高阶函数、清晰的关注点分离。
+4. **文件与函数大小**——没有过大的文件、过长的函数或意大利面条式代码。
+5. **测试**——是否存在单元测试？是否需要集成测试？
+6. **设计与正确性**——设计缺陷、数学错误、逻辑矛盾、架构问题。
+7. **API 易用性**——从调用者角度看：API 是否直观且优雅？
+8. **需求满足**——是否完全满足需求？没有偷工减料。
 
-### Flow Diagram
+### 流程图示
 
 ```
-User: /loop Refactor the auth module to use JWT
+用户：/loop 使用 JWT 重构认证模块
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  command.execute.before intercepts                              │
-  │  → Sets session to review-gated mode                            │
-  │  → Rewrites prompt with structured task instruction              │
+  │  command.execute.before 拦截                                      │
+  │  → 将会话设置为循环门控模式                                        │
+  │  → 使用结构化任务指令重写提示词                                      │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  LLM works on the task                                          │
-  │  (can use basher, editor, explorer, reverie, websearch, etc.)   │
+  │  LLM 处理任务                                                     │
+  │  （可使用 basher、editor、explorer、reverie、websearch 等）          │
   │                                                                  │
-  │  ○ If session goes idle with open todos → nudge-todo fires       │
-  │  ○ If session goes idle with no todos → loop nudge fires  │
+  │  ○ 如果会话在有待办 todo 时空闲 → nudge-todo 触发                   │
+  │  ○ 如果会话在无待办 todo 时空闲 → loop nudge 触发                   │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  LLM calls submit_review({                                       │
-  │    report: "...",                                                │
-  │    affectedFiles: ["src/auth.ts", "src/auth.test.ts"]            │
-  │  })                                                              │
+  │  LLM 调用 submit_review({                                         │
+  │    report: "...",                                                  │
+  │    affectedFiles: ["src/auth.ts", "src/auth.test.ts"]              │
+  │  })                                                                │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  Reviewer sub-session spawned (based on explorer agent)          │
-  │  → Gets REVIEW_INSTRUCTIONS + evaluation criteria                │
-  │  → Can read files, use semblle, run read-only bash commands      │
-  │  → Has submit_review_result tool                                 │
+  │ 审查员子会话生成（基于 explorer 代理）                              │
+  │  → 获取 REVIEW_INSTRUCTIONS + 评估标准                             │
+  │  → 可读取文件、使用 semblle、运行只读 bash 命令                      │
+  │  → 拥有 submit_review_result 工具                                  │
   │                                                                  │
   │  ┌─────────────────────────────────────────────────────────┐     │
-  │  │  Reviewer reads affected files, analyzes changes         │     │
+  │  │ 审查员读取受影响的文件，分析变更                            │     │
   │  │                                                          │     │
-  │  │  ├─► submit_review_result({ feedback: null })  → ACCEPT  │     │
-  │  │  └─► submit_review_result({ feedback: "..." }) → REJECT  │     │
+  │  │  ├─► submit_review_result({ feedback: null })  → 通过     │     │
+  │  │  └─► submit_review_result({ feedback: "..." }) → 拒绝     │     │
   │  │                                                          │     │
-  │  │  If reviewer ends without calling tool:                  │     │
-  │  │  → Nudged up to 3 times                                 │     │
-  │  │  → After 3 nudges, whatever text exists is used          │     │
+  │  │ 如果审查员未调用工具就结束：                                 │     │
+  │  │  → 最多提示 3 次                                          │     │
+  │  │  → 3 次提示后，使用审查员产生的文本作为反馈                  │     │
   │  └─────────────────────────────────────────────────────────┘     │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  Review result returned to LLM:                                  │
+  │ 审查结果返回给 LLM：                                              │
   │                                                                  │
-  │  If ACCEPTED: "Review passed. loop mode has ended."       │
+  │ 如果通过： "审查通过。loop 模式已结束。"                            │
   │                                                                  │
-  │  If REJECTED: "Review feedback:\n...\nAddress the feedback       │
-  │  above. loop mode has ended — you may continue normally." │
+  │ 如果拒绝： "审查反馈：\n...\n请处理上述反馈。                        │
+  │ loop 模式已结束——你可以继续正常对话。"                            │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  loop mode ends (one-shot)                                │
-  │  → Session is no longer review-gated                            │
-  │  → LLM may continue working normally                            │
+  │ loop 模式结束（一次性）                                            │
+  │  → 会话不再处于循环门控状态                                        │
+  │  → LLM 可以继续正常工作                                           │
   └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Behaviors
+### 关键行为
 
-- **One-shot:** The mode activates for exactly one review cycle. After the review resolves (accept or reject), the mode ends.
-- **Todo priority:** The todo nudge runs before the review nudge. If there are incomplete todos, the review nudge is suppressed — the LLM must finish its task before submitting.
-- **Reviewer nudging:** If the reviewer sub-session ends without calling `submit_review_result`, it is re-prompted up to 3 times. After 3 failed nudges, whatever text the reviewer produced is used as feedback.
-- **Abort suppression:** After a session abort error, both nudges are suppressed for 5 seconds to avoid feedback loops.
+- **一次性：** 模式仅激活一个审查周期。审查解决（通过或拒绝）后，模式即结束。
+- **Todo 优先级：** todo 提示在审查提示之前触发。如有未完成的 todo，审查提示被抑制——LLM 必须先完成任务再提交。
+- **审查员提示：** 如果审查员子会话未调用 `submit_review_result` 就结束，系统会重新提示最多 3 次。3 次提示失败后，审查员产生的文本将作为反馈。
+- **中止抑制：** 会话中止错误后，两个提示钩子被抑制 5 秒，避免反馈循环。
 
 ---
 
-## Architecture
+## 架构
 
-### Subagent Delegation Pattern
+### 子代理委派模式
 
-The core architectural pattern is **subagent delegation via child sessions**. When the orchestrator calls a tool like `basher`, `editor`, or `explorer`, the tool:
+核心架构模式是**通过子会话进行子代理委派**。当编排器调用 `basher`、`editor` 或 `explorer` 等工具时：
 
-1. Creates a **child session** via `client.session.create()`.
-2. Sets the child session's agent (e.g., `basher`, `editor`, `explorer`).
-3. Presents the request as a text prompt to the child session.
-4. Waits for the child session to complete.
-5. Extracts the assistant's response text via `client.session.messages()`.
+1. 通过 `client.session.create()` 创建**子会话**。
+2. 将子会话的代理设置为目标代理（例如 `basher`、`editor`、`explorer`）。
+3. 以文本提示词形式向子会话提交请求。
+4. 等待子会话完成。
+5. 通过 `client.session.messages()` 提取助手的响应文本。
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    OpenCode Session                                │
+│                    OpenCode 会话                                   │
 │                                                                   │
 │  ┌──────────────┐  basher("npm test")                             │
-│  │ Orchestrator │────────────────────────────────────────────────┐│
-│  │ (foreground) │                                                ││
-│  │              │  editor("Refactor auth...")                     ││
+│  │ 编排器         │────────────────────────────────────────────────┐│
+│  │（前台）        │                                                ││
+│  │              │  editor("重构认证模块...")                       ││
 │  │ basher  ✅   │──────────────────────────────────────────────┐ ││
 │  │ editor  ✅   │                                              │ ││
-│  │ explorer ✅  │  explorer("Find auth middleware...")          │ ││
+│  │ explorer ✅  │  explorer("查找认证中间件...")               │ ││
 │  │ bash    ❌   │────────────────────────────────────────────┐ │ ││
 │  │ edit    ❌   │                                            │ │ ││
-│  │ write   ❌   │  reverie("Design question...")             │ │ ││
+│  │ write   ❌   │  reverie("设计问题...")                    │ │ ││
 │  │ glob    ❌   │──────────────────────────────────────────┐ │ │ ││
 │  │ grep    ❌   │                                          │ │ │ ││
 │  └──────────────┘  submit_review(...)                      │ │ │ ││
 │       │            ──────────────────────────────────────┐ │ │ │ ││
 │       │                                                  │ │ │ │ ││
 │       │    ┌──────────────────┐  ┌──────────────────┐   │ │ │ │ ││
-│       │    │ Child Session    │  │ Child Session    │   │ │ │ │ ││
-│       │    │ Agent: basher    │  │ Agent: editor    │   │ │ │ │ ││
+│       │    │ 子会话           │  │ 子会话           │   │ │ │ │ ││
+│       │    │ 代理: basher     │  │ 代理: editor     │   │ │ │ │ ││
 │       │    │ bash: allow      │  │ read/write/edit   │   │ │ │ │ ││
 │       │    │ read/write: deny │  │ basher: yes       │   │ │ │ │ ││
 │       │    └──────────────────┘  └──────────────────┘   │ │ │ │ ││
 │       │                                                 │ │ │ │ ││
 │       │    ┌──────────────────┐  ┌──────────────────┐   │ │ │ │ ││
-│       │    │ Child Session    │  │ Child Session    │   │ │ │ │ ││
-│       │    │ Agent: explorer  │  │ Agent: reverie   │   │ │ │ │ ││
+│       │    │ 子会话           │  │ 子会话           │   │ │ │ │ ││
+│       │    │ 代理: explorer   │  │ 代理: reverie    │   │ │ │ │ ││
 │       │    │ semble: yes      │  │ tools: none      │   │ │ │ │ ││
 │       │    │ read: allow      │  └──────────────────┘   │ │ │ │ ││
 │       │    │ write: deny      │                         │ │ │ │ ││
 │       │    └──────────────────┘                         │ │ │ │ ││
 │       │                                                 │ │ │ │ ││
 │       │    ┌────────────────────────────────────────────┘ │ │ │ ││
-│       │    │ Child Session                                │ │ │ ││
-│       │    │ Agent: explorer (reviewer)                   │ │ │ ││
-│       │    │ tools: +submit_review_result                 │ │ │ ││
-│       │    │ Evaluates against 8 criteria                 │ │ │ ││
+│       │    │ 子会话                                       │ │ │ ││
+│       │    │ 代理: explorer（审查员）                      │ │ │ ││
+│       │    │ 工具: +submit_review_result                  │ │ │ ││
+│       │    │ 根据 8 条标准评估                             │ │ │ ││
 │       │    └──────────────────────────────────────────────┘ │ │ ││
 │       └──────────────────────────────────────────────────────┘ ││
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### Plugin Registration
+### 插件注册
 
-The plugin entry point (`src/index.ts`) registers everything in a structured `Plugin` object:
+插件入口点（`src/index.ts`）将所有内容注册到结构化的 `Plugin` 对象中：
 
 ```typescript
 export default {
   name: 'caps-context',
   tool: { basher, editor, explorer, reverie, submit_review, submit_review_result, webfetch, websearch },
-  config: (opencodeConfig) => { /* configure agents, permissions, commands */ },
-  'experimental.chat.system.transform': /* CAPS context injection */,
-  'tool.execute.before': /* bash timeout + pipe stripping */,
-  'command.execute.before': /* /loop interception */,
+  config: (opencodeConfig) => { /* 配置代理、权限、命令 */ },
+  'experimental.chat.system.transform': /* CAPS 上下文注入 */,
+  'tool.execute.before': /* bash 超时 + 管道去除 */,
+  'command.execute.before': /* /loop 拦截 */,
   'event': /* nudge-todo + loop nudge */,
 };
 ```
 
-### Permissions Model
+### 权限模型
 
-Each agent operates under strict permissions:
+每个代理在严格权限下运行：
 
-| Agent | bash | read | write | edit | glob | grep | semble | submit_review | submit_review_result |
+| 代理 | bash | read | write | edit | glob | grep | semble | submit_review | submit_review_result |
 |-------|------|------|-------|------|------|------|--------|---------------|---------------------|
 | orchestrator | ❌ | ✅* | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | basher | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -437,90 +437,90 @@ Each agent operates under strict permissions:
 | reviewer | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
 | reverie | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-*\* The orchestrator can read files indirectly via `explorer` and `editor` tools.*
+*\* 编排器可以通过 `explorer` 和 `editor` 工具间接读取文件。*
 
 ---
 
-## Setup
+## 安装
 
-### Prerequisites
+### 前置条件
 
 - [Bun](https://bun.sh) ≥ 1.3
-- Node.js ≥ 20 (for opencode)
+- Node.js ≥ 20（用于 opencode）
 
-### Installation
+### 安装步骤
 
 ```bash
-# Clone the repository
+# 克隆仓库
 git clone <repo-url> oc-kunwei
 cd oc-kunwei
 
-# Install dependencies
+# 安装依赖
 bun install
 
-# Set up API key for web search/fetch
+# 设置 Web 搜索/抓取的 API 密钥
 cp src/ollama-web/key.ts.example src/ollama-web/key.ts
 ```
 
-### API Key Configuration
+### API 密钥配置
 
-Edit `src/ollama-web/key.ts` with your ollama.com API key:
+编辑 `src/ollama-web/key.ts`，填入你的 ollama.com API 密钥：
 
 ```typescript
 export const OLLAMA_API_KEY = 'sk-or-v1-your-api-key-here';
 ```
 
-The API key is required for `websearch` and `webfetch` tools. If you do not need these tools, you can omit the key setup — the tools will return an error when called.
+`websearch` 和 `webfetch` 工具需要 API 密钥。如果不需要这些工具，可以跳过密钥配置——调用工具时会返回错误。
 
-The `key.ts` file is git-ignored (listed in `.gitignore`) and will not be committed.
+`key.ts` 文件被 git 忽略（已在 `.gitignore` 中列出），不会被提交。
 
 ---
 
-## Build & Test
+## 构建与测试
 
 ```bash
-# Bundle the plugin to dist/index.js
+# 将插件打包到 dist/index.js
 bun run build
 
-# TypeScript type checking
+# TypeScript 类型检查
 bun run typecheck
 
-# Run all tests (uses bun:test)
+# 运行所有测试（使用 bun:test）
 bun test src/
 
-# Lint with Biome
+# 使用 Biome 进行代码检查
 bun run lint
 
-# Format with Biome
+# 使用 Biome 格式化代码
 bun run format
 
-# Full check (lint + format + organize imports)
+# 完整检查（lint + format + 组织导入）
 bun run check
 
-# CI check (read-only — does not write changes)
+# CI 检查（只读——不写入更改）
 bun run check:ci
 ```
 
-### Test Structure
+### 测试结构
 
-Tests are co-located with source files (`*.test.ts`). The test runner is `bun:test`:
+测试与源文件放在同一目录（`*.test.ts`）。测试运行器为 `bun:test`：
 
-| Test file | What it covers |
+| 测试文件 | 覆盖内容 |
 |-----------|----------------|
-| `src/basher/index.test.ts` | `stripHeadTailPipes`, `enforceTimeout`, `getBasherConfig`, `createBasherTool` execution |
-| `src/editor/index.test.ts` | `getEditorConfig`, `createEditorTool` delegation |
-| `src/explorer/index.test.ts` | `getExplorerConfig`, `createExplorerTool` delegation, semble MCP presence |
-| `src/reverie/index.test.ts` | Reverie tool configuration |
-| `src/nudge-todo/index.test.ts` | Todo nudge event handling |
-| `src/ollama-web/index.test.ts` | Web search/fetch tool configuration |
-| `src/refer-caps/index.test.ts` | CAPS file discovery and context building |
-| `src/loop/index.test.ts` | Review workflow, nudging, session management |
+| `src/basher/index.test.ts` | `stripHeadTailPipes`、`enforceTimeout`、`getBasherConfig`、`createBasherTool` 执行 |
+| `src/editor/index.test.ts` | `getEditorConfig`、`createEditorTool` 委派 |
+| `src/explorer/index.test.ts` | `getExplorerConfig`、`createExplorerTool` 委派、semble MCP 存在性 |
+| `src/reverie/index.test.ts` | Reverie 工具配置 |
+| `src/nudge-todo/index.test.ts` | Todo 提示事件处理 |
+| `src/ollama-web/index.test.ts` | Web 搜索/抓取工具配置 |
+| `src/inject-caps/index.test.ts` | CAPS 文件发现和上下文构建 |
+| `src/loop/index.test.ts` | 审查工作流、提示、会话管理 |
 
 ---
 
-## Install in opencode
+## 在 opencode 中安装
 
-In your `opencode.jsonc` configuration file, add the plugin:
+在 `opencode.jsonc` 配置文件中添加插件：
 
 ```jsonc
 {
@@ -528,7 +528,7 @@ In your `opencode.jsonc` configuration file, add the plugin:
 }
 ```
 
-Or if installed from a registry:
+或从注册表安装：
 
 ```jsonc
 {
@@ -536,16 +536,16 @@ Or if installed from a registry:
 }
 ```
 
-The plugin will automatically:
-- Register all tools (`basher`, `editor`, `explorer`, `reverie`, `websearch`, `webfetch`, `submit_review`, `submit_review_result`).
-- Configure all agents with their respective permissions.
-- Disable `glob`, `grep`, and `task` tools on the orchestrator.
-- Register the `/loop` command.
-- Set up all hooks (bash timeout/pipe-stripping, command interception, nudge hooks, CAPS context injection).
+插件将自动：
+- 注册所有工具（`basher`、`editor`、`explorer`、`reverie`、`websearch`、`webfetch`、`submit_review`、`submit_review_result`）。
+- 为所有代理配置相应的权限。
+- 在编排器上禁用 `glob`、`grep` 和 `task` 工具。
+- 注册 `/loop` 命令。
+- 设置所有钩子（bash 超时/管道去除、命令拦截、提示钩子、CAPS 上下文注入）。
 
-### Verifying Installation
+### 验证安装
 
-After adding the plugin and restarting opencode, you should see:
+添加插件并重启 opencode 后，应看到：
 
 ```
 Plugin 'caps-context' loaded
@@ -555,132 +555,132 @@ Plugin 'caps-context' loaded
 
 ---
 
-## Project Structure
+## 项目结构
 
 ```
 oc-kunwei/
-├── dist/                          # Build output (bundled plugin)
+├── dist/                          # 构建输出（打包后的插件）
 │   └── index.js
-├── src/                           # Source code
-│   ├── index.ts                   # Plugin entry point — registers tools, hooks, agents, commands
+├── src/                           # 源代码
+│   ├── index.ts                   # 插件入口点——注册工具、钩子、代理、命令
 │   │
-│   ├── basher/                    # Shell execution via sub-session
-│   │   ├── index.ts               # createBasherTool, stripHeadTailPipes, enforceTimeout, getBasherConfig
-│   │   └── index.test.ts          # Unit tests for pipe stripping, timeout enforcement, tool execution
+│   ├── basher/                    # 通过子会话执行 Shell 命令
+│   │   ├── index.ts               # createBasherTool、stripHeadTailPipes、enforceTimeout、getBasherConfig
+│   │   └── index.test.ts          # 管道去除、超时强制、工具执行的单元测试
 │   │
-│   ├── editor/                    # File edit delegation via sub-session
-│   │   ├── index.ts               # createEditorTool, getEditorConfig
-│   │   └── index.test.ts          # Unit tests for editor delegation
+│   ├── editor/                    # 通过子会话委派文件编辑
+│   │   ├── index.ts               # createEditorTool、getEditorConfig
+│   │   └── index.test.ts          # editor 委派的单元测试
 │   │
-│   ├── explorer/                  # Semantic code search via semble MCP
-│   │   ├── index.ts               # createExplorerTool, getExplorerConfig
-│   │   └── index.test.ts          # Unit tests for explorer delegation
+│   ├── explorer/                  # 通过 semble MCP 进行语义代码搜索
+│   │   ├── index.ts               # createExplorerTool、getExplorerConfig
+│   │   └── index.test.ts          # explorer 委派的单元测试
 │   │
-│   ├── reverie/                   # Tool-free contemplation sub-session
-│   │   ├── index.ts               # createReverieTool, getReverieConfig
-│   │   └── index.test.ts          # Unit tests for reverie tool
+│   ├── reverie/                   # 无工具的沉思子会话
+│   │   ├── index.ts               # createReverieTool、getReverieConfig
+│   │   └── index.test.ts          # reverie 工具的单元测试
 │   │
-│   ├── loop/               # /loop command + review workflow
-│   │   ├── index.ts               # Command manager, submit_review, submit_review_result, reviewer nudge logic
-│   │   └── index.test.ts          # Unit tests for review workflow
+│   ├── loop/                      # /loop 命令 + 审查工作流
+│   │   ├── index.ts               # 命令管理器、submit_review、submit_review_result、审查员提示逻辑
+│   │   └── index.test.ts          # 审查工作流的单元测试
 │   │
-│   ├── nudge-todo/                # Auto-continue on idle when todos are incomplete
-│   │   ├── index.ts               # createNudgeTodoHook — listens for session.idle events
-│   │   └── index.test.ts          # Unit tests for nudge logic
+│   ├── nudge-todo/                # 空闲时自动继续（如有未完成的 todo）
+│   │   ├── index.ts               # createNudgeTodoHook——监听 session.idle 事件
+│   │   └── index.test.ts          # 提示逻辑的单元测试
 │   │
-│   ├── ollama-web/                # Web search/fetch via ollama.com API
-│   │   ├── index.ts               # createOllamaWebSearchTool, createOllamaWebFetchTool
-│   │   ├── index.test.ts          # Unit tests for web tool configurations
-│   │   ├── key.ts.example         # Template for API key (copy to key.ts)
-│   │   ├── key.ts                 # Your OLLAMA_API_KEY (git-ignored)
+│   ├── ollama-web/                # 通过 ollama.com API 进行 Web 搜索/抓取
+│   │   ├── index.ts               # createOllamaWebSearchTool、createOllamaWebFetchTool
+│   │   ├── index.test.ts          # Web 工具配置的单元测试
+│   │   ├── key.ts.example         # API 密钥模板（复制为 key.ts）
+│   │   ├── key.ts                 # 你的 OLLAMA_API_KEY（被 git 忽略）
 │   │
-│   ├── refer-caps/                # Inject ALL_CAPS markdown files into system prompts
-│   │   ├── index.ts               # findCapsFiles, buildCapitalsContext, createCapitalsContextHook
-│   │   └── index.test.ts          # Unit tests for CAPS file discovery
+│   ├── inject-caps/               # 将 ALL_CAPS Markdown 文件注入系统提示词
+│   │   ├── index.ts               # findCapsFiles、buildCapitalsContext、createCapitalsContextHook
+│   │   └── index.test.ts          # CAPS 文件发现的单元测试
 │   │
-│   └── utils/                     # Shared utilities
-│       └── session.ts             # extractSessionText, getAbortSignal, promptWithAbort
+│   └── utils/                     # 共享工具
+│       └── session.ts             # extractSessionText、getAbortSignal、promptWithAbort
 │
-├── biome.json                     # Biome configuration (linter, formatter)
-├── tsconfig.json                  # TypeScript configuration
-├── package.json                   # Dependencies, scripts, plugin metadata
-├── bun.lock                       # Bun lockfile
-├── .gitignore                     # Git ignore rules
-└── README.md                      # This file
+├── biome.json                     # Biome 配置（代码检查器、格式化工具）
+├── tsconfig.json                  # TypeScript 配置
+├── package.json                   # 依赖、脚本、插件元数据
+├── bun.lock                       # Bun 锁文件
+├── .gitignore                     # Git 忽略规则
+└── README.md                      # 本文档
 ```
 
-### Directory Details
+### 目录详情
 
-| Directory | Purpose |
+| 目录 | 用途 |
 |-----------|---------|
-| `src/basher/` | Shell execution with `timeout 1` enforcement, `\| head\|tail` pipe stripping, and natural-language output summarization via a dedicated basher agent. |
-| `src/editor/` | File editing delegation. The editor subagent can read, write, and edit files, plus run verification commands via `basher`. |
-| `src/explorer/` | Read-only code exploration using semble MCP for semantic search. Used as the base agent for the reviewer. |
-| `src/reverie/` | Pure text thinking — creates a sub-session with no tools and a minimal system prompt focused on deep contemplation. |
-| `src/loop/` | The complete review-gated workflow: command interception, `submit_review` tool, `submit_review_result` tool, reviewer nudge logic (up to 3 nudges), and session state management. |
-| `src/nudge-todo/` | Idle detection hook that prompts the LLM to continue working when there are incomplete todos. |
-| `src/ollama-web/` | Web search (`websearch`) and URL fetch (`webfetch`) tools backed by the ollama.com API. Requires an API key. |
-| `src/refer-caps/` | System prompt augmentation: discovers `*_CAPS.md` files and `*_CAPS/` directories at the project root and injects their contents into the system prompt. Results are cached after first build. |
-| `src/utils/` | Shared utilities for session management: extracting assistant text from child sessions, handling abort signals, and racing prompts against abort signals. |
+| `src/basher/` | Shell 执行，带 `timeout 5` 强制限制、`\| head\|tail` 管道去除，以及通过专用 basher 代理进行的自然语言输出总结。 |
+| `src/editor/` | 文件编辑委派。editor 子代理可以读取、写入和编辑文件，还可通过 `basher` 运行验证命令。 |
+| `src/explorer/` | 只读代码探索，使用 semble MCP 进行语义搜索。用作审查员的基础代理。 |
+| `src/reverie/` | 纯文本思考——创建一个无工具、系统提示词极简的子会话，专注于深度沉思。 |
+| `src/loop/` | 完整的循环门控工作流：命令拦截、`submit_review` 工具、`submit_review_result` 工具、审查员提示逻辑（最多 3 次提示）和会话状态管理。 |
+| `src/nudge-todo/` | 空闲检测钩子，当存在未完成的 todo 时提示 LLM 继续工作。 |
+| `src/ollama-web/` | 基于 ollama.com API 的 Web 搜索（`websearch`）和 URL 抓取（`webfetch`）工具。需要 API 密钥。 |
+| `src/inject-caps/` | 系统提示词增强：发现项目根目录下的 `*_CAPS.md` 文件和 `*_CAPS/` 目录，将其内容注入系统提示词。首次构建后缓存结果。 |
+| `src/utils/` | 会话管理的共享工具：从子会话提取助手文本、处理中止信号、在提示词和中止信号间竞争。 |
 
 ---
 
-## Contributing
+## 贡献
 
-### Development Workflow
+### 开发工作流
 
-1. **Fork** the repository.
-2. **Create a feature branch:** `git checkout -b feat/my-feature`.
-3. **Make changes** in `src/`.
-4. **Write tests** for new functionality. Tests use `bun:test` and are co-located with source files.
-5. **Run checks:**
+1. **Fork** 仓库。
+2. **创建特性分支：** `git checkout -b feat/my-feature`。
+3. 在 `src/` 中**进行更改**。
+4. 为新功能**编写测试**。测试使用 `bun:test`，与源文件放在同一目录。
+5. **运行检查：**
    ```bash
-   bun run typecheck   # TypeScript type safety
-   bun test src/       # All tests pass
-   bun run check       # Biome lint + format
+   bun run typecheck   # TypeScript 类型安全
+   bun test src/       # 所有测试通过
+   bun run check       # Biome 代码检查 + 格式化
    ```
-6. **Commit** using conventional commit messages:
-   - `feat:` — new feature
-   - `fix:` — bug fix
-   - `refactor:` — code restructuring
-   - `test:` — adding or updating tests
-   - `docs:` — documentation
-   - `chore:` — build, CI, tooling
-7. **Push** and open a Pull Request.
+6. 使用约定式提交消息**提交**：
+   - `feat:` ——新功能
+   - `fix:` ——Bug 修复
+   - `refactor:` ——代码重构
+   - `test:` ——添加或更新测试
+   - `docs:` ——文档
+   - `chore:` ——构建、CI、工具
+7. **推送**并发起 Pull Request。
 
-### Code Style
+### 代码风格
 
-- **Language:** TypeScript with strict mode enabled.
-- **Formatting:** Biome with 2-space indentation, single quotes, trailing commas.
-- **Line width:** 80 characters.
-- **No `any`** — except in tests (where `noExplicitAny` is relaxed).
-- **No side effects at module level** — all initialization happens in the plugin factory function.
+- **语言：** TypeScript，启用严格模式。
+- **格式化：** Biome，2 空格缩进，单引号，尾随逗号。
+- **行宽：** 80 字符。
+- **禁止使用 `any`** ——测试除外（其中 `noExplicitAny` 宽松）。
+- **模块级无副作用** ——所有初始化在插件工厂函数中完成。
 
-### Adding a New Tool
+### 添加新工具
 
-1. Create a new directory under `src/` (e.g., `src/my-tool/`).
-2. Export a `createMyTool(ctx)` function returning a `ToolDefinition`.
-3. Register the tool in `src/index.ts` under the `tool:` section.
-4. If the tool needs a dedicated agent, implement `getMyConfig()` and register agents in the `config:` callback.
-5. Add tests in `src/my-tool/index.test.ts`.
+1. 在 `src/` 下创建新目录（例如 `src/my-tool/`）。
+2. 导出返回 `ToolDefinition` 的 `createMyTool(ctx)` 函数。
+3. 在 `src/index.ts` 的 `tool:` 部分注册该工具。
+4. 如果工具需要专用代理，实现 `getMyConfig()` 并在 `config:` 回调中注册代理。
+5. 在 `src/my-tool/index.test.ts` 中添加测试。
 
-### Testing Guidelines
+### 测试指南
 
-- Use `bun:test` (`describe`, `test`, `expect`, `mock`).
-- Mock `client` objects to avoid real API calls.
-- Test both success paths and error handling.
-- Keep tests fast — they should not require network access.
+- 使用 `bun:test`（`describe`、`test`、`expect`、`mock`）。
+- 模拟 `client` 对象，避免真实的 API 调用。
+- 同时测试成功路径和错误处理。
+- 保持测试快速——不应需要网络访问。
 
-### Before Submitting
+### 提交前检查
 
-- [ ] `bun run typecheck` passes with no errors.
-- [ ] `bun test src/` passes all tests.
-- [ ] `bun run check` produces no warnings or errors.
-- [ ] New code includes tests.
-- [ ] Commit messages follow conventional format.
+- [ ] `bun run typecheck` 无错误通过。
+- [ ] `bun test src/` 所有测试通过。
+- [ ] `bun run check` 无警告或错误。
+- [ ] 新代码包含测试。
+- [ ] 提交消息遵循约定式格式。
 
 ---
 
-## License
+## 许可证
 
-[MIT](LICENSE) — feel free to use, modify, and distribute.
+[MIT](LICENSE) —— 欢迎自由使用、修改和分发。
