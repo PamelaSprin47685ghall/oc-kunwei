@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
@@ -31,8 +33,8 @@ export function stripHeadTailPipes(script: string): StripResult {
 }
 
 export function enforceTimeout(command: string): string {
-  const escaped = command.replace(/'/g, "'\\''");
-  return `timeout 5 bash -c '${escaped}'`;
+  const delimiter = randomBytes(8).toString('hex');
+  return `timeout 5 bash -s << 'EOF_${delimiter}'\n${command}\nEOF_${delimiter}`;
 }
 
 const BASHER_SYSTEM_PROMPT = `You are an expert at analyzing the output of a terminal command.
