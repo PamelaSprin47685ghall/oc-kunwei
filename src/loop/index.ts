@@ -219,7 +219,7 @@ async function runReviewerWithNudge(
       {
         path: { id: childID },
         body: {
-          agent: 'explorer',
+          agent: 'reviewer',
           parts:
             nudgeCount === 0
               ? parts
@@ -402,6 +402,22 @@ export function createLoopNudgeHook(ctx: PluginInput) {
           suppressUntil = Date.now() + SUPPRESS_AFTER_ABORT_MS;
         }
       }
+    },
+  };
+}
+
+export function getReviewerConfig() {
+  return {
+    agents: {
+      reviewer: {
+        prompt: 'You are a code reviewer...',
+        mode: 'subagent' as const,
+        permission: {
+          '*': 'deny',
+          read: 'allow',
+          bash: 'allow',
+        } as Record<string, unknown>,
+      },
     },
   };
 }

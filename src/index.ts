@@ -19,12 +19,14 @@ import {
   createSubmitReviewTool,
   createLoopCommandManager,
   createLoopNudgeHook,
+  getReviewerConfig,
 } from './loop/index.js';
 
 const { agents: basherAgents } = getBasherConfig();
 const { agents: editorAgents } = getEditorConfig();
 const { agents: explorerAgents } = getExplorerConfig();
 const { agents: reverieAgents } = getReverieConfig();
+const { agents: reviewerAgents } = getReviewerConfig();
 
 const CapsPlugin: Plugin = async (ctx) => {
   const capitalsContextHook = createCapitalsContextHook(ctx.directory);
@@ -53,6 +55,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         ...editorAgents,
         ...explorerAgents,
         ...reverieAgents,
+        ...reviewerAgents,
         orchestrator: {
           ...(opencodeConfig.agent?.orchestrator as
             | Record<string, unknown>
