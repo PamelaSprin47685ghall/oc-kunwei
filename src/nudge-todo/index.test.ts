@@ -9,11 +9,18 @@ describe('nudge-todo', () => {
       status: string;
       priority: string;
     }>;
+    messages?: Array<{
+      info: { role: string };
+      parts: Array<{ type: string; text?: string }>;
+    }>;
   }) {
     return {
       client: {
         session: {
           todo: mock(async () => ({ data: overrides?.todo ?? [] })),
+          messages: mock(
+            async () => ({ data: overrides?.messages ?? [] }),
+          ),
           prompt: mock(async () => ({})),
         },
       },
@@ -78,5 +85,25 @@ describe('nudge-todo', () => {
     });
 
     expect(ctx.client.session.todo).not.toHaveBeenCalled();
+  });
+
+  test('idle + open todos + last message has <skip-todo-check /> → no injection', async () => {
+    const ctx = mockCtx({
+      todo: [{ id: '1', content: 'x', status: 'pending', priority: 'high' }],
+      messages: [
+        {
+          info: { role: 'assistant' },
+          parts: [{ type: 'text', text: 'Some response <skip-todo-check />' }],
+        },
+      ],
+    });
+    const hook = createNudgeTodoHook(ctx);
+
+    await hook.handleEvent({
+      event: { type: 'session.idle', properties: { sessionID: 's1' } },
+    });
+
+    expect(ctx.client.session.messages).toHaveBeenCalledTimes(1);
+    expect(ctx.client.session.prompt).not.toHaveBeenCalled();
   });
 });
