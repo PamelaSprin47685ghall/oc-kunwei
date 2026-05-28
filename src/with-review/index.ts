@@ -121,7 +121,14 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
     output.parts.length = 0;
 
     const task = input.arguments.trim();
-    if (!task) return;
+    if (!task) {
+      const sid = input.sessionID;
+      if (isReviewSession(sid)) {
+        setReviewSession(sid, false);
+        output.parts.push({ type: 'text', text: 'with-review mode cancelled.' });
+      }
+      return;
+    }
 
     const sessionID = input.sessionID;
 
