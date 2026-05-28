@@ -62,6 +62,7 @@ export function createBasherTool(ctx: PluginInput): ToolDefinition {
       'Executes a bash command and returns a natural-language summary. ' +
       'MUST provide "command" and "what_to_summarize". ' +
       'The bash command has a 1-second timeout enforced by timeout(1). ' +
+      'Do NOT wrap the command with timeout(1) manually — it is added automatically. ' +
       'For longer-running commands, use tmux to run them asynchronously.',
 
     args: {
