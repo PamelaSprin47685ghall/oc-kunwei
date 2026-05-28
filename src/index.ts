@@ -12,7 +12,7 @@ import {
   createOllamaWebFetchTool,
   createOllamaWebSearchTool,
 } from './ollama-web/index.js';
-import { createCapitalsContextHook } from './refer-caps/index.js';
+import { createCapitalsContextHook } from './inject-caps/index.js';
 import { createReverieTool, getReverieConfig } from './reverie/index.js';
 import {
   createSubmitReviewResultTool,

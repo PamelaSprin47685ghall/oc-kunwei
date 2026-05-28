@@ -40,13 +40,13 @@ describe('stripHeadTailPipes', () => {
 });
 
 describe('enforceTimeout', () => {
-  test('wraps with timeout 1 bash -c', () => {
-    expect(enforceTimeout('echo hello')).toBe("timeout 1 bash -c 'echo hello'");
+  test('wraps with timeout 5 bash -c', () => {
+    expect(enforceTimeout('echo hello')).toBe("timeout 5 bash -c 'echo hello'");
   });
 
   test('escapes single quotes for safe bash -c', () => {
     const result = enforceTimeout("echo 'hello world'");
-    expect(result).toStartWith('timeout 1 bash -c');
+    expect(result).toStartWith('timeout 5 bash -c');
     // The embedded single quotes are escaped as '\'' sequences
     // so the whole command can be safely wrapped in bash -c '...'
     expect(result).toContain("'\\''");

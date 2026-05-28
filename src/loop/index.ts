@@ -361,7 +361,7 @@ export function createLoopNudgeHook(ctx: PluginInput) {
         );
         if (open.length > 0) return;
 
-        // If the last assistant message contains <skip-review-check />, suppress the nudge
+        // If the last assistant message contains <skip-loop-check />, suppress the nudge
         try {
           const msgResult = await ctx.client.session.messages({
             path: { id: sessionID },
@@ -376,7 +376,7 @@ export function createLoopNudgeHook(ctx: PluginInput) {
               .filter((p) => p.type === 'text' && p.text)
               .map((p) => p.text!)
               .join('\n');
-            if (fullText.includes('<skip-review-check />')) return;
+            if (fullText.includes('<skip-loop-check />')) return;
           }
         } catch {
           // best-effort
