@@ -49,8 +49,9 @@ const CapsPlugin: Plugin = async (ctx) => {
     },
 
     config: async (opencodeConfig) => {
+      const userAgent = opencodeConfig.agent ?? {};
       opencodeConfig.agent = {
-        ...opencodeConfig.agent,
+        ...userAgent,
         ...basherAgents,
         ...editorAgents,
         ...explorerAgents,
@@ -70,6 +71,15 @@ const CapsPlugin: Plugin = async (ctx) => {
           } as Record<string, unknown>,
         },
       };
+
+      // Restore user's model settings (overwritten by plugin defaults)
+      for (const name of ['basher', 'editor', 'explorer', 'reviewer']) {
+        const userEntry = userAgent[name] as Record<string, unknown> | undefined;
+        const agentEntry = (opencodeConfig.agent as Record<string, unknown>)[name] as Record<string, unknown> | undefined;
+        if (agentEntry && userEntry?.model) {
+          agentEntry.model = userEntry.model;
+        }
+      }
 
       loopCommandManager.registerCommand(opencodeConfig);
 
