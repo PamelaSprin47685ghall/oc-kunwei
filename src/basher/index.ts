@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+
 
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
@@ -27,11 +27,6 @@ export function stripHeadTailPipes(script: string): StripResult {
     current = next;
   }
   return { script: current, stripped };
-}
-
-export function enforceTimeout(command: string): string {
-  const delimiter = randomBytes(8).toString('hex');
-  return `timeout 5 bash -s << 'EOF_${delimiter}'\n${command}\nEOF_${delimiter}`;
 }
 
 const BASHER_SYSTEM_PROMPT = `You are an expert at analyzing the output of a terminal command.
@@ -63,9 +58,8 @@ export function createBasherTool(ctx: PluginInput): ToolDefinition {
     description:
       'Executes a bash command and returns a natural-language summary. ' +
       'MUST provide "command" and "what_to_summarize". ' +
-      'The bash command has a 5-second timeout enforced by timeout(1). ' +
-      'Do NOT wrap the command with timeout(1) manually — it is added automatically. ' +
-      'For longer-running commands, use tmux to run them asynchronously.',
+      'The bash command has a 5-second timeout. ' +
+      'For longer-running commands like git clone, compile, or test, use tmux to run them asynchronously.',
 
     args: {
       command: tool.schema.string().describe('The bash command to execute'),

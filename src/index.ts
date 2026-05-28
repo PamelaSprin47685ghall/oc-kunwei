@@ -1,7 +1,6 @@
 import type { Plugin } from '@opencode-ai/plugin';
 import {
   createBasherTool,
-  enforceTimeout,
   getBasherConfig,
   stripHeadTailPipes,
 } from './basher/index.js';
@@ -130,7 +129,8 @@ const CapsPlugin: Plugin = async (ctx) => {
       const args = output.args;
       if (!args || typeof args.command !== 'string') return;
       const { script } = stripHeadTailPipes(args.command);
-      args.command = enforceTimeout(script);
+      args.command = script;
+      args.timeout = 5000;
     },
 
     'tool.execute.after': async (
