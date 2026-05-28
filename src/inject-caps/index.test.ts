@@ -167,8 +167,8 @@ describe('createCapitalsContextHook', () => {
     await hook.handleSystemTransform({ sessionID: 'ses_1' }, output);
 
     expect(output.system).toHaveLength(2);
-    expect(output.system[1]).toContain('<caps-context file="STATUS.md">');
-    expect(output.system[1]).toContain('project is active');
+    expect(output.system[0]).toContain('<caps-context file="STATUS.md">');
+    expect(output.system[0]).toContain('project is active');
   });
 
   it('does not inject when no caps files exist', async () => {
