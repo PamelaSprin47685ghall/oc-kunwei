@@ -18,11 +18,7 @@ export function createNudgeTodoHook(ctx: PluginInput) {
       const sessionID = props.sessionID as string | undefined;
       if (!sessionID) return;
 
-      if (
-        event.type === 'session.idle' ||
-        (event.type === 'session.status' &&
-          (props.status as { type?: string })?.type === 'idle')
-      ) {
+      if (event.type === 'session.idle') {
         if (Date.now() < suppressUntil) return;
 
         let todos: Array<{
