@@ -83,6 +83,10 @@ function isReviewSession(sessionID: string): boolean {
 }
 
 function setReviewSession(sessionID: string, active: boolean): void {
+  if (!active) {
+    reviewSessions.delete(sessionID);
+    return;
+  }
   const entry = reviewSessions.get(sessionID);
   if (entry) {
     entry.active = active;
@@ -230,7 +234,7 @@ async function runReviewerWithNudge(
       abortSignal,
     )
       .then(() => ({ type: 'prompt_done' as const }))
-      .catch(() => ({ type: 'prompt_done' as const }));
+      .catch((error) => ({ type: 'error' as const, error }));
 
     const result = await Promise.race([
       deferred.promise.then((r) => ({ type: 'result' as const, result: r })),
@@ -238,11 +242,18 @@ async function runReviewerWithNudge(
     ]);
 
     if (result.type === 'result') {
+      reviewSessions.delete(childID);
       return result.result;
+    }
+
+    if (result.type === 'error') {
+      reviewSessions.delete(childID);
+      return { feedback: result.error instanceof Error ? result.error.message : String(result.error) };
     }
 
     nudgeCount++;
     if (nudgeCount >= MAX_REVIEWER_NUDGES) {
+      reviewSessions.delete(childID);
       const text = await extractSessionText(client, childID, directory);
       return { feedback: text || 'Reviewer failed to complete review after multiple attempts.' };
     }

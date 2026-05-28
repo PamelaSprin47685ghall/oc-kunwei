@@ -2,10 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import {
-  getAbortSignal,
-  runSubagent,
-} from '../utils/session';
+import { getAbortSignal, runSubagent } from '../utils/session';
 
 const REVERIE_SYSTEM_PROMPT =
   'You are in a quiet room with the texts and the question.\n' +

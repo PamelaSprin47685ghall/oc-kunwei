@@ -7,7 +7,10 @@ describe('getExplorerConfig', () => {
     expect(cfg.agents.explorer.mode).toBe('subagent');
     expect(cfg.agents.explorer.prompt).toContain('code exploration');
     expect(cfg.agents.explorer.tools).toEqual({ basher: true });
-    expect(cfg.agents.explorer.permission).toEqual({ '*': 'deny', read: 'allow' });
+    expect(cfg.agents.explorer.permission).toEqual({
+      '*': 'deny',
+      read: 'allow',
+    });
   });
 
   test('has semble MCP', () => {

@@ -1,9 +1,6 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import {
-  getAbortSignal,
-  runSubagent,
-} from '../utils/session';
+import { getAbortSignal, runSubagent } from '../utils/session';
 
 const EDITOR_SYSTEM_PROMPT =
   'You are a code editing assistant. Given a task description, implement the necessary code changes in the workspace. ' +
@@ -60,7 +57,12 @@ export function getEditorConfig() {
         prompt: EDITOR_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         tools: { basher: true },
-        permission: { '*': 'deny', read: 'allow', write: 'allow', edit: 'allow' } as Record<string, unknown>,
+        permission: {
+          '*': 'deny',
+          read: 'allow',
+          write: 'allow',
+          edit: 'allow',
+        } as Record<string, unknown>,
       },
     },
   };

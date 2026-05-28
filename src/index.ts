@@ -7,20 +7,20 @@ import {
 } from './basher/index.js';
 import { createEditorTool, getEditorConfig } from './editor/index.js';
 import { createExplorerTool, getExplorerConfig } from './explorer/index.js';
+import { createCapitalsContextHook } from './inject-caps/index.js';
+import {
+  createLoopCommandManager,
+  createLoopNudgeHook,
+  createSubmitReviewResultTool,
+  createSubmitReviewTool,
+  getReviewerConfig,
+} from './loop/index.js';
 import { createNudgeTodoHook } from './nudge-todo/index.js';
 import {
   createOllamaWebFetchTool,
   createOllamaWebSearchTool,
 } from './ollama-web/index.js';
-import { createCapitalsContextHook } from './inject-caps/index.js';
 import { createReverieTool, getReverieConfig } from './reverie/index.js';
-import {
-  createSubmitReviewResultTool,
-  createSubmitReviewTool,
-  createLoopCommandManager,
-  createLoopNudgeHook,
-  getReviewerConfig,
-} from './loop/index.js';
 
 const { agents: basherAgents } = getBasherConfig();
 const { agents: editorAgents } = getEditorConfig();
@@ -73,9 +73,19 @@ const CapsPlugin: Plugin = async (ctx) => {
       };
 
       // Restore user's model settings (overwritten by plugin defaults)
-      for (const name of ['basher', 'editor', 'explorer', 'reverie', 'reviewer']) {
-        const userEntry = userAgent[name] as Record<string, unknown> | undefined;
-        const agentEntry = (opencodeConfig.agent as Record<string, unknown>)[name] as Record<string, unknown> | undefined;
+      for (const name of [
+        'basher',
+        'editor',
+        'explorer',
+        'reverie',
+        'reviewer',
+      ]) {
+        const userEntry = userAgent[name] as
+          | Record<string, unknown>
+          | undefined;
+        const agentEntry = (opencodeConfig.agent as Record<string, unknown>)[
+          name
+        ] as Record<string, unknown> | undefined;
         if (agentEntry && userEntry?.model) {
           agentEntry.model = userEntry.model;
         }

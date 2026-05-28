@@ -18,9 +18,7 @@ describe('nudge-todo', () => {
       client: {
         session: {
           todo: mock(async () => ({ data: overrides?.todo ?? [] })),
-          messages: mock(
-            async () => ({ data: overrides?.messages ?? [] }),
-          ),
+          messages: mock(async () => ({ data: overrides?.messages ?? [] })),
           prompt: mock(async () => ({})),
         },
       },

@@ -1,9 +1,6 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import {
-  getAbortSignal,
-  runSubagent,
-} from '../utils/session';
+import { getAbortSignal, runSubagent } from '../utils/session';
 
 const EXPLORER_SYSTEM_PROMPT =
   'You are a code exploration agent. Given a search query, use semble_search to find relevant code in the workspace. ' +

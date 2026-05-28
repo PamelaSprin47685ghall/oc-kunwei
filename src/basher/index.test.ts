@@ -52,8 +52,8 @@ describe('enforceTimeout', () => {
     // Extract the delimiter between EOF_ and the newline
     const match = result.match(/<< 'EOF_([a-f0-9]+)'/);
     expect(match).not.toBeNull();
-    expect(match![1]).toHaveLength(16);
-    expect(match![1]).toMatch(/^[a-f0-9]+$/);
+    expect(match?.[1]).toHaveLength(16);
+    expect(match?.[1]).toMatch(/^[a-f0-9]+$/);
   });
 
   test('random delimiter changes between calls', () => {
@@ -81,7 +81,10 @@ describe('getBasherConfig', () => {
     const cfg = getBasherConfig();
     expect(cfg.agents.basher.mode).toBe('subagent');
     expect(cfg.agents.basher.prompt).toContain('expert at analyzing');
-    expect(cfg.agents.basher.permission).toEqual({ '*': 'deny', bash: 'allow' });
+    expect(cfg.agents.basher.permission).toEqual({
+      '*': 'deny',
+      bash: 'allow',
+    });
   });
 });
 

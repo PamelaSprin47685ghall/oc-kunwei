@@ -2,10 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import {
-  getAbortSignal,
-  runSubagent,
-} from '../utils/session';
+import { getAbortSignal, runSubagent } from '../utils/session';
 
 const HEAD_TAIL_PIPE_RE =
   /\s*\|\s*(head|tail)\s+(?:-n\s*|-)\d+(?=\s*(?:[;&\n#]|$))/g;

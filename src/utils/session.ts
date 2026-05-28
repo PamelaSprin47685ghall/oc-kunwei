@@ -64,7 +64,7 @@ export async function promptWithAbort(
     return;
   }
 
-  const promptPromise = client.session.prompt(args).catch(() => {});
+  const promptPromise = client.session.prompt(args);
 
   let rejectAbort: (reason?: unknown) => void;
   const abortPromise = new Promise<void>((_, reject) => {
@@ -79,8 +79,9 @@ export async function promptWithAbort(
 
   try {
     await Promise.race([promptPromise, abortPromise]);
-  } catch {
-    // Aborted – suppress the error
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return;
+    throw err;
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
