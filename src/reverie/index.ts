@@ -3,9 +3,8 @@ import * as path from 'node:path';
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
-  extractSessionText,
   getAbortSignal,
-  promptWithAbort,
+  runSubagent,
 } from '../utils/session';
 
 const REVERIE_SYSTEM_PROMPT =
@@ -80,31 +79,14 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
       }
       parts.push({ type: 'text', text: `Question:\n${args.question}` });
 
-      const createResult = await client.session.create({
-        query: { directory: dir },
-        body: {
-          parentID: sessionID,
-          title: 'Reverie',
-        },
-      });
-      const childID = createResult.data?.id;
-      if (!childID) return 'Failed to create child session';
-
-      await promptWithAbort(
-        client,
-        {
-          path: { id: childID },
-          body: {
-            agent: 'reverie',
-            parts,
-          },
-        },
+      return runSubagent(client, {
+        agent: 'reverie',
+        title: 'Reverie',
+        parts,
+        directory: dir,
+        sessionID,
         abortSignal,
-      );
-
-      return (
-        (await extractSessionText(client, childID, dir)) || '(no output)'
-      );
+      });
     },
   });
 }

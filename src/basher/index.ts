@@ -1,9 +1,8 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
-  extractSessionText,
   getAbortSignal,
-  promptWithAbort,
+  runSubagent,
 } from '../utils/session';
 
 const HEAD_TAIL_PIPE_RE =
@@ -89,36 +88,19 @@ export function createBasherTool(ctx: PluginInput): ToolDefinition {
 
       const { script } = stripHeadTailPipes(args.command);
 
-      const createResult = await client.session.create({
-        query: { directory },
-        body: {
-          parentID: sessionID,
-          title: 'Basher',
-        },
-      });
-      const childID = createResult.data?.id;
-      if (!childID) return 'Failed to create child session';
-
-      await promptWithAbort(
-        client,
-        {
-          path: { id: childID },
-          body: {
-            agent: 'basher',
-            parts: [
-              {
-                type: 'text',
-                text: buildPrompt(script, args.what_to_summarize),
-              },
-            ],
+      return runSubagent(client, {
+        agent: 'basher',
+        title: 'Basher',
+        parts: [
+          {
+            type: 'text',
+            text: buildPrompt(script, args.what_to_summarize),
           },
-        },
+        ],
+        directory,
+        sessionID,
         abortSignal,
-      );
-
-      return (
-        (await extractSessionText(client, childID, directory)) || '(no output)'
-      );
+      });
     },
   });
 }

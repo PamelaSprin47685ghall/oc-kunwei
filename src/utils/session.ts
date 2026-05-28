@@ -85,3 +85,41 @@ export async function promptWithAbort(
     signal.removeEventListener('abort', onAbort);
   }
 }
+
+export interface SubagentParams {
+  agent: string;
+  title: string;
+  parts: Array<{ type: 'text'; text: string }>;
+  directory: string;
+  sessionID?: string;
+  abortSignal?: AbortSignal;
+}
+
+export async function runSubagent(
+  client: PluginInput['client'],
+  params: SubagentParams,
+): Promise<string> {
+  const createResult = await client.session.create({
+    query: { directory: params.directory },
+    body: {
+      parentID: params.sessionID,
+      title: params.title,
+    },
+  });
+  const childID = createResult.data?.id;
+  if (!childID) return 'Failed to create child session';
+
+  await promptWithAbort(
+    client,
+    {
+      path: { id: childID },
+      body: {
+        agent: params.agent,
+        parts: params.parts,
+      },
+    },
+    params.abortSignal,
+  );
+
+  return (await extractSessionText(client, childID, params.directory)) || '(no output)';
+}

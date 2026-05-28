@@ -1,9 +1,8 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
-  extractSessionText,
   getAbortSignal,
-  promptWithAbort,
+  runSubagent,
 } from '../utils/session';
 
 const EDITOR_SYSTEM_PROMPT =
@@ -42,31 +41,14 @@ export function createEditorTool(ctx: PluginInput): ToolDefinition {
           : undefined;
       const abortSignal = getAbortSignal(context);
 
-      const createResult = await client.session.create({
-        query: { directory },
-        body: {
-          parentID: sessionID,
-          title: 'Editor',
-        },
-      });
-      const childID = createResult.data?.id;
-      if (!childID) return 'Failed to create child session';
-
-      await promptWithAbort(
-        client,
-        {
-          path: { id: childID },
-          body: {
-            agent: 'editor',
-            parts: [{ type: 'text', text: args.task }],
-          },
-        },
+      return runSubagent(client, {
+        agent: 'editor',
+        title: 'Editor',
+        parts: [{ type: 'text', text: args.task }],
+        directory,
+        sessionID,
         abortSignal,
-      );
-
-      return (
-        (await extractSessionText(client, childID, directory)) || '(no output)'
-      );
+      });
     },
   });
 }
