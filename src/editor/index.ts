@@ -17,15 +17,17 @@ export function createEditorTool(ctx: PluginInput): ToolDefinition {
   return tool({
     description:
       'Delegates code editing to a dedicated editor agent. ' +
-      'Provide a detailed task description specifying what files to change and how. ' +
+      'Provide a task description stating only WHAT to change (the intent/purpose). ' +
+      'Do NOT include old or new file contents — just describe the intent of the change. ' +
       'The editor agent can read, edit, and write files, and run commands via basher.',
 
     args: {
       task: tool.schema
         .string()
         .describe(
-          'Detailed description of the editing task. ' +
-            'Include file paths, specific changes, and any relevant context.',
+          'Describe only WHAT to change and why. ' +
+            'State the intent of the edit (e.g., "change the button color to red", "add a null check before the call"). ' +
+            'Do NOT include old code or new code — just describe the desired change.',
         ),
     },
 

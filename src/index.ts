@@ -47,13 +47,6 @@ const CapsPlugin: Plugin = async (ctx) => {
     },
 
     config: async (opencodeConfig) => {
-      opencodeConfig.tools = {
-        ...(opencodeConfig.tools as Record<string, boolean> | undefined),
-        glob: false,
-        grep: false,
-        task: false,
-      };
-
       opencodeConfig.agent = {
         ...opencodeConfig.agent,
         ...basherAgents,
@@ -70,6 +63,7 @@ const CapsPlugin: Plugin = async (ctx) => {
             write: 'deny',
             glob: 'deny',
             grep: 'deny',
+            task: 'deny',
           } as Record<string, unknown>,
         },
       };
