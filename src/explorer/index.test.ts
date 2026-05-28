@@ -2,11 +2,11 @@ import { describe, expect, mock, test } from 'bun:test';
 import { createExplorerTool, getExplorerConfig } from './index';
 
 describe('getExplorerConfig', () => {
-  test('returns explorer agent with read + basher tools', () => {
+  test('returns explorer agent with basher tool', () => {
     const cfg = getExplorerConfig();
     expect(cfg.agents.explorer.mode).toBe('subagent');
     expect(cfg.agents.explorer.prompt).toContain('code exploration');
-    expect(cfg.agents.explorer.tools).toEqual({ read: true, basher: true });
+    expect(cfg.agents.explorer.tools).toEqual({ basher: true });
   });
 
   test('has semble MCP', () => {
@@ -17,11 +17,6 @@ describe('getExplorerConfig', () => {
   test('prompt warns against using basher for modifications', () => {
     const cfg = getExplorerConfig();
     expect(cfg.agents.explorer.prompt).toContain('Do NOT use basher');
-  });
-
-  test('orchestrator tools disable glob and grep', () => {
-    const cfg = getExplorerConfig();
-    expect(cfg.orchestratorTools).toEqual({ glob: false, grep: false });
   });
 });
 

@@ -21,12 +21,9 @@ import {
   createWithReviewNudgeHook,
 } from './with-review/index.js';
 
-const { agents: basherAgents, orchestratorTools: basherTools } =
-  getBasherConfig();
-const { agents: editorAgents, orchestratorTools: editorTools } =
-  getEditorConfig();
-const { agents: explorerAgents, orchestratorTools: explorerTools } =
-  getExplorerConfig();
+const { agents: basherAgents } = getBasherConfig();
+const { agents: editorAgents } = getEditorConfig();
+const { agents: explorerAgents } = getExplorerConfig();
 const { agents: reverieAgents } = getReverieConfig();
 
 const CapsPlugin: Plugin = async (ctx) => {
@@ -52,7 +49,6 @@ const CapsPlugin: Plugin = async (ctx) => {
     config: async (opencodeConfig) => {
       opencodeConfig.tools = {
         ...(opencodeConfig.tools as Record<string, boolean> | undefined),
-        bash: false,
         glob: false,
         grep: false,
       };
@@ -67,11 +63,13 @@ const CapsPlugin: Plugin = async (ctx) => {
           ...(opencodeConfig.agent?.orchestrator as
             | Record<string, unknown>
             | undefined),
-          tools: {
-            ...basherTools,
-            ...editorTools,
-            ...explorerTools,
-          },
+          permission: {
+            bash: 'deny',
+            edit: 'deny',
+            write: 'deny',
+            glob: 'deny',
+            grep: 'deny',
+          } as Record<string, unknown>,
         },
       };
 

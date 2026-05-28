@@ -49,12 +49,8 @@ export function getEditorConfig() {
       editor: {
         prompt: EDITOR_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        tools: { read: true, write: true, edit: true, basher: true },
+        tools: { basher: true },
       },
-    },
-    orchestratorTools: {
-      edit: false,
-      write: false,
     },
   };
 }

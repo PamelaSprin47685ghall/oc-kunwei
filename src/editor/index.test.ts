@@ -2,21 +2,11 @@ import { describe, expect, mock, test } from 'bun:test';
 import { createEditorTool, getEditorConfig } from './index';
 
 describe('getEditorConfig', () => {
-  test('returns editor agent with explicit tools', () => {
+  test('returns editor agent with basher tool and subagent mode', () => {
     const cfg = getEditorConfig();
     expect(cfg.agents.editor.mode).toBe('subagent');
     expect(cfg.agents.editor.prompt).toContain('code editing');
-    expect(cfg.agents.editor.tools).toEqual({
-      read: true,
-      write: true,
-      edit: true,
-      basher: true,
-    });
-  });
-
-  test('orchestrator tools disable edit and write', () => {
-    const cfg = getEditorConfig();
-    expect(cfg.orchestratorTools).toEqual({ edit: false, write: false });
+    expect(cfg.agents.editor.tools).toEqual({ basher: true });
   });
 });
 

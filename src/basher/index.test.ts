@@ -59,16 +59,10 @@ describe('enforceTimeout', () => {
 });
 
 describe('getBasherConfig', () => {
-  test('returns basher agent with bash tool', () => {
+  test('returns basher agent with subagent mode and prompt', () => {
     const cfg = getBasherConfig();
-    expect(cfg.agents.basher.tools).toEqual({ bash: true });
     expect(cfg.agents.basher.mode).toBe('subagent');
     expect(cfg.agents.basher.prompt).toContain('expert at analyzing');
-  });
-
-  test('orchestrator tools disable bash', () => {
-    const cfg = getBasherConfig();
-    expect(cfg.orchestratorTools).toEqual({ bash: false });
   });
 });
 

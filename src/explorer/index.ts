@@ -47,13 +47,9 @@ export function getExplorerConfig() {
       explorer: {
         prompt: EXPLORER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        tools: { read: true, basher: true },
+        tools: { basher: true },
         mcps: ['semble'],
       },
-    },
-    orchestratorTools: {
-      glob: false,
-      grep: false,
     },
   };
 }

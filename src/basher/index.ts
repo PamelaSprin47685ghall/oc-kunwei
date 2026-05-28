@@ -101,12 +101,8 @@ export function getBasherConfig() {
     agents: {
       basher: {
         prompt: BASHER_SYSTEM_PROMPT,
-        tools: { bash: true },
         mode: 'subagent' as const,
       },
-    },
-    orchestratorTools: {
-      bash: false,
     },
   };
 }
