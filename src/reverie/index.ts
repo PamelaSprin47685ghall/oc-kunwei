@@ -2,7 +2,11 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import { extractSessionText } from '../utils/session';
+import {
+  extractSessionText,
+  getAbortSignal,
+  promptWithAbort,
+} from '../utils/session';
 
 const REVERIE_SYSTEM_PROMPT =
   'You are in a quiet room with the texts and the question.\n' +
@@ -42,11 +46,21 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
         .describe('File paths to provide as context for the contemplation.'),
     },
 
-    async execute(args) {
+    async execute(args, context) {
+      const dir =
+        context && typeof context === 'object' && 'directory' in context
+          ? (context as { directory: string }).directory
+          : directory;
+      const sessionID =
+        context && typeof context === 'object' && 'sessionID' in context
+          ? (context as { sessionID: string }).sessionID
+          : undefined;
+      const abortSignal = getAbortSignal(context);
+
       const parts: Array<{ type: 'text'; text: string }> = [];
 
       for (const file of args.files) {
-        const fullPath = path.resolve(directory, file);
+        const fullPath = path.resolve(dir, file);
         try {
           const content = await fs.readFile(fullPath, 'utf-8');
           parts.push({
@@ -66,19 +80,31 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
       }
       parts.push({ type: 'text', text: `Question:\n${args.question}` });
 
-      const createResult = await client.session.create();
+      const createResult = await client.session.create({
+        query: { directory: dir },
+        body: {
+          parentID: sessionID,
+          title: 'Reverie',
+        },
+      });
       const childID = createResult.data?.id;
       if (!childID) return 'Failed to create child session';
 
-      await client.session.prompt({
-        path: { id: childID },
-        body: {
-          agent: 'reverie',
-          parts,
+      await promptWithAbort(
+        client,
+        {
+          path: { id: childID },
+          body: {
+            agent: 'reverie',
+            parts,
+          },
         },
-      });
+        abortSignal,
+      );
 
-      return (await extractSessionText(client, childID)) || '(no output)';
+      return (
+        (await extractSessionText(client, childID, dir)) || '(no output)'
+      );
     },
   });
 }
@@ -89,7 +115,7 @@ export function getReverieConfig() {
       reverie: {
         prompt: REVERIE_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        tools: {},
+        permission: { '*': 'deny' } as Record<string, unknown>,
       },
     },
   };

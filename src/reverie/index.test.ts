@@ -6,7 +6,7 @@ describe('getReverieConfig', () => {
     const cfg = getReverieConfig();
     expect(cfg.agents.reverie.mode).toBe('subagent');
     expect(cfg.agents.reverie.prompt).toContain('quiet room');
-    expect(cfg.agents.reverie.tools).toEqual({});
+    expect(cfg.agents.reverie.permission).toEqual({ '*': 'deny' });
   });
 });
 
