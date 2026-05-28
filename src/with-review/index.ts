@@ -1,6 +1,10 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import { extractSessionText } from '../utils/session';
+import {
+  extractSessionText,
+  getAbortSignal,
+  promptWithAbort,
+} from '../utils/session';
 
 const COMMAND_NAME = 'with-review';
 const INTERNAL_MARKER = '<!-- CAPS_INTERNAL_INITIATOR -->';
@@ -20,7 +24,7 @@ const REVIEW_INSTRUCTIONS = `You are a code reviewer performing a rigorous revie
 
 ${REVIEW_CRITERIA}
 
-Based on the change report and affected files above, read and inspect the actual file contents before making your judgment.
+Based on the original task, change report, and affected files above, read and inspect the actual file contents before making your judgment. The original task is the authoritative requirement — verify that the implementation satisfies it, not just that it matches the self-reported change report.
 
 # Submitting Your Verdict
 
@@ -70,6 +74,7 @@ interface ReviewResult {
 interface ReviewSessionEntry {
   active: boolean;
   pendingResult?: Deferred<ReviewResult>;
+  originalTask?: string;
 }
 
 const reviewSessions = new Map<string, ReviewSessionEntry>();
@@ -138,6 +143,8 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
     }
 
     setReviewSession(sessionID, true);
+    const entry = reviewSessions.get(sessionID);
+    if (entry) entry.originalTask = task;
 
     output.parts.push(
       createInternalAgentTextPart(
@@ -196,6 +203,8 @@ async function runReviewerWithNudge(
   client: PluginInput['client'],
   childID: string,
   parts: Array<{ type: 'text'; text: string }>,
+  directory?: string,
+  abortSignal?: AbortSignal,
 ): Promise<ReviewResult> {
   const deferred = new Deferred<ReviewResult>();
   const entry = reviewSessions.get(childID);
@@ -211,8 +220,9 @@ async function runReviewerWithNudge(
   let nudgeCount = 0;
 
   while (true) {
-    const promptPromise = client.session
-      .prompt({
+    const promptPromise = promptWithAbort(
+      client,
+      {
         path: { id: childID },
         body: {
           agent: 'explorer',
@@ -222,7 +232,9 @@ async function runReviewerWithNudge(
               : [{ type: 'text', text: REVIEWER_NUDGE_PROMPT }],
           tools: { submit_review_result: true },
         },
-      })
+      },
+      abortSignal,
+    )
       .then(() => ({ type: 'prompt_done' as const }))
       .catch(() => ({ type: 'prompt_done' as const }));
 
@@ -237,8 +249,8 @@ async function runReviewerWithNudge(
 
     nudgeCount++;
     if (nudgeCount >= MAX_REVIEWER_NUDGES) {
-      const text = await extractSessionText(client, childID);
-      return { feedback: text || null };
+      const text = await extractSessionText(client, childID, directory);
+      return { feedback: text || 'Reviewer failed to complete review after multiple attempts.' };
     }
   }
 }
@@ -261,7 +273,17 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
     },
 
     async execute(args, context) {
-      if (!isReviewSession(context.sessionID)) {
+      const directory =
+        context && typeof context === 'object' && 'directory' in context
+          ? (context as { directory: string }).directory
+          : ctx.directory;
+      const sessionID =
+        context && typeof context === 'object' && 'sessionID' in context
+          ? (context as { sessionID: string }).sessionID
+          : undefined;
+      const abortSignal = getAbortSignal(context);
+
+      if (!sessionID || !isReviewSession(sessionID)) {
         return 'You do not need review. Just continue with your work.';
       }
 
@@ -282,11 +304,22 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
         text: `=== Affected Files ===\n\n${args.affectedFiles.join('\n')}`,
       });
 
-      const createResult = await client.session.create();
+      const entry = reviewSessions.get(sessionID);
+      if (entry?.originalTask) {
+        parts.push({ type: 'text', text: '=== Original Task ===\n\n' + entry.originalTask });
+      }
+
+      const createResult = await client.session.create({
+        query: { directory },
+        body: {
+          parentID: sessionID,
+          title: 'Reviewer',
+        },
+      });
       const childID = createResult.data?.id;
       if (!childID) return 'Failed to create reviewer session';
 
-      const result = await runReviewerWithNudge(client, childID, parts);
+      const result = await runReviewerWithNudge(client, childID, parts, directory, abortSignal);
 
       setReviewSession(context.sessionID, false);
 
