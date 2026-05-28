@@ -321,13 +321,12 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
 
       const result = await runReviewerWithNudge(client, childID, parts, directory, abortSignal);
 
-      setReviewSession(context.sessionID, false);
-
       if (result.feedback == null) {
+        setReviewSession(context.sessionID, false);
         return 'Review passed. Your changes have been accepted. with-review mode has ended.';
       }
 
-      return `Review feedback:\n\n${result.feedback}\n\nAddress the feedback above. with-review mode has ended — you may continue normally.`;
+      return `Review feedback:\n\n${result.feedback}\n\nAddress the feedback above. with-review mode is still active — fix the issues and call submit_review again.`;
     },
   });
 }
