@@ -48,6 +48,7 @@ export function getExplorerConfig() {
         prompt: EXPLORER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         tools: { basher: true },
+        permission: { '*': 'deny', read: 'allow' } as Record<string, unknown>,
         mcps: ['semble'],
       },
     },

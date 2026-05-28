@@ -59,10 +59,11 @@ describe('enforceTimeout', () => {
 });
 
 describe('getBasherConfig', () => {
-  test('returns basher agent with subagent mode and prompt', () => {
+  test('returns basher agent with subagent mode and bash-only permission', () => {
     const cfg = getBasherConfig();
     expect(cfg.agents.basher.mode).toBe('subagent');
     expect(cfg.agents.basher.prompt).toContain('expert at analyzing');
+    expect(cfg.agents.basher.permission).toEqual({ '*': 'deny', bash: 'allow' });
   });
 });
 

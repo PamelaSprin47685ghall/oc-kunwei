@@ -50,6 +50,7 @@ export function getEditorConfig() {
         prompt: EDITOR_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         tools: { basher: true },
+        permission: { '*': 'deny', read: 'allow', write: 'allow', edit: 'allow' } as Record<string, unknown>,
       },
     },
   };

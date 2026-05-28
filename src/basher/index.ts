@@ -102,6 +102,7 @@ export function getBasherConfig() {
       basher: {
         prompt: BASHER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
+        permission: { '*': 'deny', bash: 'allow' } as Record<string, unknown>,
       },
     },
   };
