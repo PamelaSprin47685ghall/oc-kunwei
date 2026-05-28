@@ -73,7 +73,7 @@ const CapsPlugin: Plugin = async (ctx) => {
       };
 
       // Restore user's model settings (overwritten by plugin defaults)
-      for (const name of ['basher', 'editor', 'explorer', 'reviewer']) {
+      for (const name of ['basher', 'editor', 'explorer', 'reverie', 'reviewer']) {
         const userEntry = userAgent[name] as Record<string, unknown> | undefined;
         const agentEntry = (opencodeConfig.agent as Record<string, unknown>)[name] as Record<string, unknown> | undefined;
         if (agentEntry && userEntry?.model) {
