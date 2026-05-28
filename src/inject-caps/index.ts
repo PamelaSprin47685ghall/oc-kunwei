@@ -28,12 +28,20 @@ export async function findCapsFiles(
   for (const entry of rootEntries) {
     const fullPath = path.join(projectRoot, entry.name);
 
-    if (entry.isFile() && CAPS_FILE_RE.test(entry.name) && !EXCLUDED_FILE_NAMES.has(entry.name)) {
+    if (
+      entry.isFile() &&
+      CAPS_FILE_RE.test(entry.name) &&
+      !EXCLUDED_FILE_NAMES.has(entry.name)
+    ) {
       const info = await tryReadFile(fullPath, entry.name);
       if (info) results.push(info);
     }
 
-    if (entry.isDirectory() && CAPS_DIR_RE.test(entry.name) && !EXCLUDED_DIR_NAMES.has(entry.name)) {
+    if (
+      entry.isDirectory() &&
+      CAPS_DIR_RE.test(entry.name) &&
+      !EXCLUDED_DIR_NAMES.has(entry.name)
+    ) {
       const dirFiles = await discoverFilesInDir(fullPath);
       for (const filePath of dirFiles) {
         const info = await tryReadFile(
@@ -108,17 +116,18 @@ export interface CapitalsContextHook {
 export function createCapitalsContextHook(
   projectRoot: string,
 ): CapitalsContextHook {
-  let cachedContext: string | null = null;
+  let cachedPromise: Promise<string> | null = null;
 
   return {
     async handleSystemTransform(
       _input: { sessionID?: string },
       output: { system: string[] },
     ): Promise<void> {
-      if (cachedContext === null) {
-        cachedContext = await buildCapitalsContext(projectRoot);
+      if (cachedPromise === null) {
+        cachedPromise = buildCapitalsContext(projectRoot);
       }
-      if (!cachedContext) return;
+      const context = await cachedPromise;
+      if (!context) return;
 
       const marker = '<caps-context';
       if (
@@ -126,7 +135,7 @@ export function createCapitalsContextHook(
       )
         return;
 
-      output.system.unshift(cachedContext);
+      output.system.unshift(context);
     },
   };
 }

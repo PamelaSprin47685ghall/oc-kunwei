@@ -75,7 +75,10 @@ export function createBasherTool(ctx: PluginInput): ToolDefinition {
     },
 
     async execute(args, context) {
-      const { directory, sessionID, abortSignal } = extractToolContext(context, ctx.directory);
+      const { directory, sessionID, abortSignal } = extractToolContext(
+        context,
+        ctx.directory,
+      );
 
       const { script } = stripHeadTailPipes(args.command);
 

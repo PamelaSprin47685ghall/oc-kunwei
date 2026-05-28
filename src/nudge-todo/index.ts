@@ -1,4 +1,9 @@
 import type { PluginInput } from '@opencode-ai/plugin';
+import {
+  createAbortSuppressor,
+  isAbortErrorName,
+} from '../utils/abort-suppress';
+import { asMessageArray, asTodoArray } from '../utils/session';
 
 const NUDGE_PROMPT =
   'There are still incomplete todos. Continue working through the remaining items. If stuck or blocked, explain the situation and ask for guidance. If you want to skip this check, respond with <skip-todo-check />';
@@ -7,7 +12,7 @@ const TERMINAL_STATUSES = ['completed', 'cancelled'];
 const SUPPRESS_AFTER_ABORT_MS = 5_000;
 
 export function createNudgeTodoHook(ctx: PluginInput) {
-  let suppressUntil = 0;
+  const suppressor = createAbortSuppressor(SUPPRESS_AFTER_ABORT_MS);
 
   return {
     handleEvent: async (input: {
@@ -19,19 +24,14 @@ export function createNudgeTodoHook(ctx: PluginInput) {
       if (!sessionID) return;
 
       if (event.type === 'session.idle') {
-        if (Date.now() < suppressUntil) return;
+        if (suppressor.isSuppressed()) return;
 
-        let todos: Array<{
-          id: string;
-          content: string;
-          status: string;
-          priority: string;
-        }>;
+        let todos: ReturnType<typeof asTodoArray>;
         try {
           const result = await ctx.client.session.todo({
             path: { id: sessionID },
           });
-          todos = result.data as typeof todos;
+          todos = asTodoArray(result.data);
         } catch {
           return;
         }
@@ -39,21 +39,17 @@ export function createNudgeTodoHook(ctx: PluginInput) {
         const open = todos.filter((t) => !TERMINAL_STATUSES.includes(t.status));
         if (open.length === 0) return;
 
-        // Check if last assistant message contains <skip-todo-check />
         try {
           const messagesResult = await ctx.client.session.messages({
             path: { id: sessionID },
           });
-          const messages = messagesResult.data as Array<{
-            info: { role: string };
-            parts: Array<{ type: string; text?: string }>;
-          }>;
+          const messages = asMessageArray(messagesResult.data);
           const lastAssistant = [...messages]
             .reverse()
-            .find((m) => m.info.role === 'assistant');
+            .find((m) => m.info?.role === 'assistant');
           if (lastAssistant) {
-            const fullText = lastAssistant.parts
-              .filter((p) => p.type === 'text')
+            const fullText = (lastAssistant.parts ?? [])
+              .filter((p) => p.type === 'text' && p.text)
               .map((p) => p.text ?? '')
               .join('');
             if (fullText.includes('<skip-todo-check />')) return;
@@ -75,11 +71,8 @@ export function createNudgeTodoHook(ctx: PluginInput) {
 
       if (event.type === 'session.error') {
         const error = props.error as { name?: string } | undefined;
-        if (
-          error?.name === 'MessageAbortedError' ||
-          error?.name === 'AbortError'
-        ) {
-          suppressUntil = Date.now() + SUPPRESS_AFTER_ABORT_MS;
+        if (isAbortErrorName(error?.name)) {
+          suppressor.suppress();
         }
       }
     },

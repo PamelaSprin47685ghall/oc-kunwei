@@ -42,7 +42,10 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
     },
 
     async execute(args, context) {
-      const { directory, sessionID, abortSignal } = extractToolContext(context, ctx.directory);
+      const { directory, sessionID, abortSignal } = extractToolContext(
+        context,
+        ctx.directory,
+      );
 
       const parts: Array<{ type: 'text'; text: string }> = [];
 

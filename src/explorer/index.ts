@@ -24,7 +24,10 @@ export function createExplorerTool(ctx: PluginInput): ToolDefinition {
     },
 
     async execute(args, context) {
-      const { directory, sessionID, abortSignal } = extractToolContext(context, ctx.directory);
+      const { directory, sessionID, abortSignal } = extractToolContext(
+        context,
+        ctx.directory,
+      );
 
       return runSubagent(client, {
         agent: 'explorer',

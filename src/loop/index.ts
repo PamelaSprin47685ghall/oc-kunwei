@@ -1,6 +1,12 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
+  createAbortSuppressor,
+  isAbortErrorName,
+} from '../utils/abort-suppress';
+import {
+  asMessageArray,
+  asTodoArray,
   extractSessionText,
   extractToolContext,
   promptWithAbort,
@@ -43,6 +49,9 @@ const REVIEWER_NUDGE_PROMPT =
 
 const MAX_REVIEWER_NUDGES = 3;
 
+const REVIEWER_GRACE_MS = 1500;
+const GRACE_TIMEOUT = Symbol('grace_timeout');
+
 const NUDGE_PROMPT =
   'You are in loop mode. You must call the submit_review tool to\n' +
   'submit your detailed report and list of modified files for review\n' +
@@ -68,32 +77,126 @@ class Deferred<T> {
 
 interface ReviewResult {
   feedback: string | null;
+  terminated?: boolean;
 }
 
-interface ReviewSessionEntry {
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface ReviewEntry {
   active: boolean;
-  pendingResult?: Deferred<ReviewResult>;
   originalTask?: string;
+  locked: boolean;
+  createdAt: number;
+  pendingResult?: Deferred<ReviewResult>;
 }
 
-const reviewSessions = new Map<string, ReviewSessionEntry>();
+class ReviewSessionManager {
+  private sessions = new Map<string, ReviewEntry>();
+  private children = new Map<string, Set<string>>();
 
-function isReviewSession(sessionID: string): boolean {
-  return reviewSessions.get(sessionID)?.active === true;
-}
-
-function setReviewSession(sessionID: string, active: boolean): void {
-  if (!active) {
-    reviewSessions.delete(sessionID);
-    return;
+  activate(sessionID: string, task: string): void {
+    this.evictStale();
+    this.sessions.set(sessionID, {
+      active: true,
+      originalTask: task,
+      locked: false,
+      createdAt: Date.now(),
+    });
   }
-  const entry = reviewSessions.get(sessionID);
-  if (entry) {
-    entry.active = active;
-  } else {
-    reviewSessions.set(sessionID, { active });
+
+  addChild(parentID: string, childID: string): void {
+    if (!parentID || !childID) return;
+    const set = this.children.get(parentID);
+    if (set) set.add(childID);
+    else this.children.set(parentID, new Set([childID]));
+  }
+
+  cascadeDelete(sessionID: string): void {
+    const childIDs = this.children.get(sessionID);
+    if (childIDs) {
+      for (const childID of childIDs) {
+        const entry = this.sessions.get(childID);
+        entry?.pendingResult?.resolve({
+          feedback: 'Parent session closed.',
+          terminated: true,
+        });
+        this.sessions.delete(childID);
+      }
+      this.children.delete(sessionID);
+    }
+    this.sessions.delete(sessionID);
+  }
+
+  deactivate(sessionID: string): void {
+    this.evictStale();
+    this.cascadeDelete(sessionID);
+  }
+
+  isActive(sessionID: string): boolean {
+    return this.sessions.get(sessionID)?.active === true;
+  }
+
+  tryLock(sessionID: string): boolean {
+    const entry = this.sessions.get(sessionID);
+    if (!entry || entry.locked) return false;
+    entry.locked = true;
+    return true;
+  }
+
+  unlock(sessionID: string): void {
+    const entry = this.sessions.get(sessionID);
+    if (entry) entry.locked = false;
+  }
+
+  setPending(sessionID: string, deferred: Deferred<ReviewResult>): void {
+    this.evictStale();
+    const entry = this.sessions.get(sessionID);
+    if (entry) {
+      entry.pendingResult = deferred;
+    } else {
+      this.sessions.set(sessionID, {
+        active: false,
+        locked: false,
+        createdAt: Date.now(),
+        pendingResult: deferred,
+      });
+    }
+  }
+
+  resolvePending(sessionID: string, result: ReviewResult): boolean {
+    this.evictStale();
+    const entry = this.sessions.get(sessionID);
+    if (!entry?.pendingResult) return false;
+    entry.pendingResult.resolve(result);
+    entry.pendingResult = undefined;
+    return true;
+  }
+
+  getTask(sessionID: string): string | undefined {
+    return this.sessions.get(sessionID)?.originalTask;
+  }
+
+  delete(sessionID: string): void {
+    this.cascadeDelete(sessionID);
+  }
+
+  clear(): void {
+    this.sessions.clear();
+    this.children.clear();
+  }
+
+  private evictStale(): void {
+    const cutoff = Date.now() - SESSION_TTL_MS;
+    for (const [key, entry] of this.sessions) {
+      if (entry.createdAt < cutoff) {
+        entry.pendingResult?.resolve({ feedback: 'Session expired' });
+        this.sessions.delete(key);
+      }
+    }
   }
 }
+
+const reviewSessions = new ReviewSessionManager();
 
 export function createLoopCommandManager(_ctx: PluginInput) {
   function registerCommand(opencodeConfig: Record<string, unknown>): void {
@@ -127,32 +230,32 @@ export function createLoopCommandManager(_ctx: PluginInput) {
     const task = input.arguments.trim();
     if (!task) {
       const sid = input.sessionID;
-      setReviewSession(sid, false);
+      reviewSessions.deactivate(sid);
       output.parts.push({ type: 'text', text: 'loop mode cancelled.' });
       return;
     }
 
     const sessionID = input.sessionID;
 
-    if (isReviewSession(sessionID)) {
-      output.parts.push(
-        { type: 'text', text: 'loop mode is already active. Submit your work via submit_review.' },
-      );
+    if (reviewSessions.isActive(sessionID)) {
+      output.parts.push({
+        type: 'text',
+        text: 'loop mode is already active. Submit your work via submit_review.',
+      });
       return;
     }
 
-    setReviewSession(sessionID, true);
-    const entry = reviewSessions.get(sessionID);
-    if (entry) entry.originalTask = task;
+    reviewSessions.activate(sessionID, task);
 
-    output.parts.push(
-      { type: 'text', text:
+    output.parts.push({
+      type: 'text',
+      text:
         `Task (loop): ${task}\n\n` +
-          'loop mode is active. Complete the task above, then call submit_review with:\n' +
-          '- report: a detailed description of what you did and why\n' +
-          '- affectedFiles: list of every file you modified or created\n\n' +
-          'A reviewer will examine your submission. If accepted, you are done. If rejected, you will receive specific feedback to address.' },
-    );
+        'loop mode is active. Complete the task above, then call submit_review with:\n' +
+        '- report: a detailed description of what you did and why\n' +
+        '- affectedFiles: list of every file you modified or created\n\n' +
+        'A reviewer will examine your submission. If accepted, you are done. If rejected, you will receive specific feedback to address.',
+    });
   }
 
   return { registerCommand, handleCommandExecuteBefore };
@@ -175,11 +278,6 @@ export function createSubmitReviewResultTool(): ToolDefinition {
     },
 
     async execute(args, context) {
-      const reviewSession = reviewSessions.get(context.sessionID);
-      if (!reviewSession?.pendingResult) {
-        return 'Error: No pending review to resolve.';
-      }
-
       const feedback =
         args.feedback == null
           ? null
@@ -187,8 +285,12 @@ export function createSubmitReviewResultTool(): ToolDefinition {
             ? null
             : args.feedback;
 
-      reviewSession.pendingResult.resolve({ feedback });
-      reviewSession.pendingResult = undefined;
+      const resolved = reviewSessions.resolvePending(context.sessionID, {
+        feedback,
+      });
+      if (!resolved) {
+        return 'Error: No pending review to resolve.';
+      }
 
       return feedback == null
         ? 'Review submitted: accepted.'
@@ -205,19 +307,18 @@ async function runReviewerWithNudge(
   abortSignal?: AbortSignal,
 ): Promise<ReviewResult> {
   const deferred = new Deferred<ReviewResult>();
-  const entry = reviewSessions.get(childID);
-  if (entry) {
-    entry.pendingResult = deferred;
-  } else {
-    reviewSessions.set(childID, {
-      active: false,
-      pendingResult: deferred,
-    });
-  }
+  reviewSessions.setPending(childID, deferred);
+
+  if (abortSignal?.aborted)
+    return { feedback: 'Review aborted.', terminated: true };
 
   let nudgeCount = 0;
 
   while (true) {
+    const iterAbort = new AbortController();
+    const onOuterAbort = () => iterAbort.abort();
+    abortSignal?.addEventListener('abort', onOuterAbort);
+
     const promptPromise = promptWithAbort(
       client,
       {
@@ -231,7 +332,7 @@ async function runReviewerWithNudge(
           tools: { submit_review_result: true },
         },
       },
-      abortSignal,
+      iterAbort.signal,
     )
       .then(() => ({ type: 'prompt_done' as const }))
       .catch((error) => ({ type: 'error' as const, error }));
@@ -241,6 +342,9 @@ async function runReviewerWithNudge(
       promptPromise,
     ]);
 
+    abortSignal?.removeEventListener('abort', onOuterAbort);
+    iterAbort.abort();
+
     if (result.type === 'result') {
       reviewSessions.delete(childID);
       return result.result;
@@ -248,17 +352,40 @@ async function runReviewerWithNudge(
 
     if (result.type === 'error') {
       reviewSessions.delete(childID);
-      if (result.error instanceof DOMException && result.error.name === 'AbortError') {
-        return { feedback: 'Review aborted.' };
+      const errName = (result.error as { name?: string })?.name;
+      if (isAbortErrorName(errName)) {
+        return { feedback: 'Review aborted.', terminated: true };
       }
-      return { feedback: result.error instanceof Error ? result.error.message : String(result.error) };
+      return {
+        feedback:
+          result.error instanceof Error
+            ? result.error.message
+            : String(result.error),
+        terminated: true,
+      };
+    }
+
+    const graceResult = await Promise.race([
+      deferred.promise,
+      new Promise<typeof GRACE_TIMEOUT>((resolve) =>
+        setTimeout(() => resolve(GRACE_TIMEOUT), REVIEWER_GRACE_MS),
+      ),
+    ]);
+
+    if (graceResult !== GRACE_TIMEOUT) {
+      reviewSessions.delete(childID);
+      return graceResult;
     }
 
     nudgeCount++;
     if (nudgeCount >= MAX_REVIEWER_NUDGES) {
       reviewSessions.delete(childID);
       const text = await extractSessionText(client, childID, directory);
-      return { feedback: text || 'Reviewer failed to complete review after multiple attempts.' };
+      return {
+        feedback:
+          text || 'Reviewer failed to complete review after multiple attempts.',
+        terminated: true,
+      };
     }
   }
 }
@@ -281,10 +408,17 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
     },
 
     async execute(args, context) {
-      const { directory, sessionID, abortSignal } = extractToolContext(context, ctx.directory);
+      const { directory, sessionID, abortSignal } = extractToolContext(
+        context,
+        ctx.directory,
+      );
 
-      if (!sessionID || !isReviewSession(sessionID)) {
+      if (!sessionID || !reviewSessions.isActive(sessionID)) {
         return 'You do not need review. Just continue with your work.';
+      }
+
+      if (!reviewSessions.tryLock(sessionID)) {
+        return 'A review is already in progress. Wait for it to finish.';
       }
 
       const parts: Array<{ type: 'text'; text: string }> = [];
@@ -304,9 +438,12 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
         text: `=== Affected Files ===\n\n${args.affectedFiles.join('\n')}`,
       });
 
-      const entry = reviewSessions.get(sessionID);
-      if (entry?.originalTask) {
-        parts.push({ type: 'text', text: '=== Original Task ===\n\n' + entry.originalTask });
+      const task = reviewSessions.getTask(sessionID);
+      if (task) {
+        parts.push({
+          type: 'text',
+          text: `=== Original Task ===\n\n${task}`,
+        });
       }
 
       const createResult = await client.session.create({
@@ -318,12 +455,28 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
       });
       const childID = createResult.data?.id;
       if (!childID) return 'Failed to create reviewer session';
+      reviewSessions.addChild(sessionID, childID);
 
-      const result = await runReviewerWithNudge(client, childID, parts, directory, abortSignal);
+      const result = await runReviewerWithNudge(
+        client,
+        childID,
+        parts,
+        directory,
+        abortSignal,
+      );
 
       if (result.feedback == null) {
-        setReviewSession(sessionID!, false);
+        reviewSessions.deactivate(sessionID);
         return 'Review passed. Your changes have been accepted. loop mode has ended.';
+      }
+
+      if (result.terminated) {
+        reviewSessions.deactivate(sessionID);
+        return `Review terminated: ${result.feedback}`;
+      }
+
+      if (sessionID) {
+        reviewSessions.unlock(sessionID);
       }
 
       return `Review feedback:\n\n${result.feedback}\n\nAddress the feedback above. loop mode is still active — fix the issues and call submit_review again.`;
@@ -332,7 +485,7 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
 }
 
 export function createLoopNudgeHook(ctx: PluginInput) {
-  let suppressUntil = 0;
+  const suppressor = createAbortSuppressor(SUPPRESS_AFTER_ABORT_MS);
 
   return {
     handleEvent: async (input: {
@@ -344,8 +497,8 @@ export function createLoopNudgeHook(ctx: PluginInput) {
       if (!sessionID) return;
 
       if (event.type === 'session.idle') {
-        if (Date.now() < suppressUntil) return;
-        if (!isReviewSession(sessionID)) return;
+        if (suppressor.isSuppressed()) return;
+        if (!reviewSessions.isActive(sessionID)) return;
 
         let todos: Array<{
           id: string;
@@ -357,7 +510,7 @@ export function createLoopNudgeHook(ctx: PluginInput) {
           const result = await ctx.client.session.todo({
             path: { id: sessionID },
           });
-          todos = result.data as typeof todos;
+          todos = asTodoArray(result.data);
         } catch {
           return;
         }
@@ -372,15 +525,14 @@ export function createLoopNudgeHook(ctx: PluginInput) {
           const msgResult = await ctx.client.session.messages({
             path: { id: sessionID },
           });
-          const messages = (msgResult.data ?? []) as Array<{
-            info?: { role?: string };
-            parts?: Array<{ type?: string; text?: string }>;
-          }>;
-          const lastAssistant = [...messages].reverse().find((m) => m.info?.role === 'assistant');
+          const messages = asMessageArray(msgResult.data);
+          const lastAssistant = [...messages]
+            .reverse()
+            .find((m) => m.info?.role === 'assistant');
           if (lastAssistant) {
             const fullText = (lastAssistant.parts ?? [])
               .filter((p) => p.type === 'text' && p.text)
-              .map((p) => p.text!)
+              .map((p) => p.text ?? '')
               .join('\n');
             if (fullText.includes('<skip-loop-check />')) return;
           }
@@ -401,12 +553,17 @@ export function createLoopNudgeHook(ctx: PluginInput) {
 
       if (event.type === 'session.error') {
         const error = props.error as { name?: string } | undefined;
-        if (
-          error?.name === 'MessageAbortedError' ||
-          error?.name === 'AbortError'
-        ) {
-          suppressUntil = Date.now() + SUPPRESS_AFTER_ABORT_MS;
+        if (isAbortErrorName(error?.name)) {
+          suppressor.suppress();
         }
+      }
+
+      if (
+        event.type === 'session.delete' ||
+        event.type === 'session.close' ||
+        event.type === 'session.remove'
+      ) {
+        reviewSessions.deactivate(sessionID);
       }
     },
   };
@@ -428,10 +585,4 @@ export function getReviewerConfig() {
   };
 }
 
-export {
-  isReviewSession,
-  setReviewSession,
-  reviewSessions,
-  Deferred,
-  ReviewResult,
-};
+export { Deferred, type ReviewResult, reviewSessions };

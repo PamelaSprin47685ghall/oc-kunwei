@@ -1,4 +1,11 @@
 import type { PluginInput } from '@opencode-ai/plugin';
+import { isAbortErrorName } from './abort-suppress';
+
+export function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) return isAbortErrorName(error.name);
+  if (error instanceof Error) return isAbortErrorName(error.name);
+  return false;
+}
 
 export async function extractSessionText(
   client: PluginInput['client'],
@@ -9,10 +16,7 @@ export async function extractSessionText(
     path: { id: sessionId },
     ...(directory ? { query: { directory } } : {}),
   });
-  const messages = (result.data ?? []) as Array<{
-    info?: { role?: string };
-    parts?: Array<{ type?: string; text?: string }>;
-  }>;
+  const messages = asMessageArray(result.data);
   const texts: string[] = [];
   for (const m of messages) {
     if (m.info?.role !== 'assistant') continue;
@@ -24,8 +28,7 @@ export async function extractSessionText(
 }
 
 /**
- * Extract an AbortSignal from a context object.
- * Returns the signal if `context` is an object with an `abort` property
+ * Returns the abort signal if `context` is an object with an `abort` property
  * that looks like an AbortSignal (has `addEventListener`, `removeEventListener`, `aborted`).
  */
 export function getAbortSignal(context: unknown): AbortSignal | undefined {
@@ -46,7 +49,11 @@ export function getAbortSignal(context: unknown): AbortSignal | undefined {
 export function extractToolContext(
   context: unknown,
   fallbackDirectory: string,
-): { directory: string; sessionID: string | undefined; abortSignal: AbortSignal | undefined } {
+): {
+  directory: string;
+  sessionID: string | undefined;
+  abortSignal: AbortSignal | undefined;
+} {
   const directory =
     context && typeof context === 'object' && 'directory' in context
       ? (context as { directory: string }).directory
@@ -123,17 +130,58 @@ export async function runSubagent(
   const childID = createResult.data?.id;
   if (!childID) return 'Failed to create child session';
 
-  await promptWithAbort(
-    client,
-    {
-      path: { id: childID },
-      body: {
-        agent: params.agent,
-        parts: params.parts,
+  try {
+    await promptWithAbort(
+      client,
+      {
+        path: { id: childID },
+        body: {
+          agent: params.agent,
+          parts: params.parts,
+        },
       },
-    },
-    params.abortSignal,
-  );
+      params.abortSignal,
+    );
+  } catch (err) {
+    if (isAbortError(err)) {
+      const text = await extractSessionText(client, childID, params.directory);
+      return text ? `(aborted) ${text}` : '(aborted)';
+    }
+    throw err;
+  }
 
-  return (await extractSessionText(client, childID, params.directory)) || '(no output)';
+  return (
+    (await extractSessionText(client, childID, params.directory)) ||
+    '(no output)'
+  );
+}
+
+export interface TodoItem {
+  id: string;
+  content: string;
+  status: string;
+  priority: string;
+}
+
+export interface SessionMessage {
+  info?: { role?: string };
+  parts?: Array<{ type?: string; text?: string }>;
+}
+
+export function asTodoArray(data: unknown): TodoItem[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(
+    (item): item is TodoItem =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as TodoItem).id === 'string' &&
+      typeof (item as TodoItem).status === 'string',
+  );
+}
+
+export function asMessageArray(data: unknown): SessionMessage[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(
+    (item): item is SessionMessage => typeof item === 'object' && item !== null,
+  );
 }

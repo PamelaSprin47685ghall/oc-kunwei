@@ -62,7 +62,11 @@ const CapsPlugin: Plugin = async (ctx) => {
             | Record<string, unknown>
             | undefined),
           permission: {
-            ...((opencodeConfig.agent?.orchestrator as Record<string, unknown> | undefined)?.permission as Record<string, unknown> | undefined),
+            ...((
+              opencodeConfig.agent?.orchestrator as
+                | Record<string, unknown>
+                | undefined
+            )?.permission as Record<string, unknown> | undefined),
             bash: 'deny',
             edit: 'deny',
             write: 'deny',

@@ -3,10 +3,9 @@ import {
   createLoopCommandManager,
   createLoopNudgeHook,
   createSubmitReviewResultTool,
-  isReviewSession,
-  reviewSessions,
-  setReviewSession,
+  createSubmitReviewTool,
   Deferred,
+  reviewSessions,
 } from './index';
 
 function createMockContext() {
@@ -45,18 +44,23 @@ afterEach(() => {
 
 describe('reviewSessions state', () => {
   test('starts inactive', () => {
-    expect(isReviewSession('ses-1')).toBe(false);
+    expect(reviewSessions.isActive('ses-1')).toBe(false);
   });
 
-  test('can activate', () => {
-    setReviewSession('ses-1', true);
-    expect(isReviewSession('ses-1')).toBe(true);
+  test('can activate and deactivate', () => {
+    reviewSessions.activate('ses-1', 'test task');
+    expect(reviewSessions.isActive('ses-1')).toBe(true);
+    reviewSessions.deactivate('ses-1');
+    expect(reviewSessions.isActive('ses-1')).toBe(false);
   });
 
-  test('can deactivate', () => {
-    setReviewSession('ses-1', true);
-    setReviewSession('ses-1', false);
-    expect(isReviewSession('ses-1')).toBe(false);
+  test('stores original task', () => {
+    reviewSessions.activate('ses-1', 'Refactor the auth module');
+    expect(reviewSessions.getTask('ses-1')).toBe('Refactor the auth module');
+  });
+
+  test('unlock on unknown session does not throw', () => {
+    expect(() => reviewSessions.unlock('nonexistent')).not.toThrow();
   });
 });
 
@@ -72,22 +76,20 @@ describe('createLoopCommandManager', () => {
         string,
         { template: string; description: string }
       >;
-      expect(commands['loop']).toBeDefined();
-      expect(commands['loop'].description).toContain('review');
+      expect(commands.loop).toBeDefined();
+      expect(commands.loop.description).toContain('review');
     });
 
     test('does not overwrite existing command', () => {
       const manager = createLoopCommandManager(createMockContext());
       const existing = { template: 'custom', description: 'custom' };
       const config: Record<string, unknown> = {
-        command: { 'loop': existing },
+        command: { loop: existing },
       };
 
       manager.registerCommand(config);
 
-      expect(
-        (config.command as Record<string, unknown>)['loop'],
-      ).toBe(existing);
+      expect((config.command as Record<string, unknown>).loop).toBe(existing);
     });
   });
 
@@ -114,7 +116,7 @@ describe('createLoopCommandManager', () => {
         output,
       );
 
-      expect(isReviewSession('ses-1')).toBe(false);
+      expect(reviewSessions.isActive('ses-1')).toBe(false);
       expect(output.parts[0]?.text).toContain('cancelled');
     });
 
@@ -131,15 +133,15 @@ describe('createLoopCommandManager', () => {
         output,
       );
 
-      expect(isReviewSession('ses-1')).toBe(true);
+      expect(reviewSessions.isActive('ses-1')).toBe(true);
       expect(output.parts[0]?.text).toContain('Refactor the auth module');
       expect(output.parts[0]?.text).toContain('loop mode is active');
       expect(output.parts[0]?.text).toContain('submit_review');
       expect(output.parts[0]?.text).toContain('affectedFiles');
     });
 
-    test('does not toggle — already active is a no-op', async () => {
-      setReviewSession('ses-1', true);
+    test('does not toggle [\u2014] already active is a no-op', async () => {
+      reviewSessions.activate('ses-1', 'existing task');
       const manager = createLoopCommandManager(createMockContext());
       const output = createOutput();
 
@@ -152,18 +154,15 @@ describe('createLoopCommandManager', () => {
         output,
       );
 
-      expect(isReviewSession('ses-1')).toBe(true);
+      expect(reviewSessions.isActive('ses-1')).toBe(true);
       expect(output.parts[0]?.text).toContain('already active');
     });
-
   });
 });
 
 describe('createSubmitReviewResultTool', () => {
   test('resolves pending result with null feedback (accept)', async () => {
-    reviewSessions.set('reviewer-1', { active: false });
-    const entry = reviewSessions.get('reviewer-1')!;
-    entry.pendingResult = new Deferred<any>();
+    reviewSessions.setPending('reviewer-1', new Deferred<any>());
 
     const reviewTool = createSubmitReviewResultTool();
     const result = await (reviewTool as any).execute(
@@ -172,13 +171,10 @@ describe('createSubmitReviewResultTool', () => {
     );
 
     expect(result).toContain('accepted');
-    expect(entry.pendingResult).toBeUndefined();
   });
 
   test('resolves pending result with feedback (reject)', async () => {
-    reviewSessions.set('reviewer-1', { active: false });
-    const entry = reviewSessions.get('reviewer-1')!;
-    entry.pendingResult = new Deferred<any>();
+    reviewSessions.setPending('reviewer-1', new Deferred<any>());
 
     const reviewTool = createSubmitReviewResultTool();
     const result = await (reviewTool as any).execute(
@@ -200,9 +196,7 @@ describe('createSubmitReviewResultTool', () => {
   });
 
   test('treats empty string as null (accept)', async () => {
-    reviewSessions.set('reviewer-1', { active: false });
-    const entry = reviewSessions.get('reviewer-1')!;
-    entry.pendingResult = new Deferred<any>();
+    reviewSessions.setPending('reviewer-1', new Deferred<any>());
 
     const reviewTool = createSubmitReviewResultTool();
     const result = await (reviewTool as any).execute(
@@ -211,6 +205,31 @@ describe('createSubmitReviewResultTool', () => {
     );
 
     expect(result).toContain('accepted');
+  });
+});
+
+describe('createSubmitReviewTool', () => {
+  test('rejects when session is not in loop mode', async () => {
+    const ctx = createMockContext();
+    const tool = createSubmitReviewTool(ctx);
+    const result = await (tool as any).execute(
+      { report: 'did stuff', affectedFiles: ['a.ts'] },
+      { sessionID: 'ses-1', directory: '/tmp' },
+    );
+    expect(result).toContain('do not need review');
+  });
+
+  test('rejects concurrent review attempts', async () => {
+    reviewSessions.activate('ses-1', 'task');
+    reviewSessions.tryLock('ses-1');
+
+    const ctx = createMockContext();
+    const tool = createSubmitReviewTool(ctx);
+    const result = await (tool as any).execute(
+      { report: 'did stuff', affectedFiles: ['a.ts'] },
+      { sessionID: 'ses-1', directory: '/tmp' },
+    );
+    expect(result).toContain('already in progress');
   });
 });
 
@@ -230,7 +249,7 @@ describe('createLoopNudgeHook', () => {
     const ctx = createMockContext();
     ctx.client.session.todo = mock(() => ({ data: [] }));
     const hook = createLoopNudgeHook(ctx);
-    setReviewSession('ses-1', true);
+    reviewSessions.activate('ses-1', 'task');
 
     await hook.handleEvent({
       event: { type: 'session.idle', properties: { sessionID: 'ses-1' } },
@@ -252,7 +271,7 @@ describe('createLoopNudgeHook', () => {
       ],
     }));
     const hook = createLoopNudgeHook(ctx);
-    setReviewSession('ses-1', true);
+    reviewSessions.activate('ses-1', 'task');
 
     await hook.handleEvent({
       event: { type: 'session.idle', properties: { sessionID: 'ses-1' } },
@@ -264,7 +283,7 @@ describe('createLoopNudgeHook', () => {
   test('suppresses nudge after abort error', async () => {
     const ctx = createMockContext();
     const hook = createLoopNudgeHook(ctx);
-    setReviewSession('ses-1', true);
+    reviewSessions.activate('ses-1', 'task');
 
     await hook.handleEvent({
       event: {
