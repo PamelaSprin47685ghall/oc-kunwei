@@ -51,6 +51,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         ...(opencodeConfig.tools as Record<string, boolean> | undefined),
         glob: false,
         grep: false,
+        task: false,
       };
 
       opencodeConfig.agent = {

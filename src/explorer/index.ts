@@ -1,6 +1,10 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import { extractSessionText } from '../utils/session';
+import {
+  extractSessionText,
+  getAbortSignal,
+  promptWithAbort,
+} from '../utils/session';
 
 const EXPLORER_SYSTEM_PROMPT =
   'You are a code exploration agent. Given a search query, use semble_search to find relevant code in the workspace. ' +
@@ -23,20 +27,42 @@ export function createExplorerTool(ctx: PluginInput): ToolDefinition {
         .describe('Natural-language search query describing the code to find.'),
     },
 
-    async execute(args) {
-      const createResult = await client.session.create();
+    async execute(args, context) {
+      const directory =
+        context && typeof context === 'object' && 'directory' in context
+          ? (context as { directory: string }).directory
+          : ctx.directory;
+      const sessionID =
+        context && typeof context === 'object' && 'sessionID' in context
+          ? (context as { sessionID: string }).sessionID
+          : undefined;
+      const abortSignal = getAbortSignal(context);
+
+      const createResult = await client.session.create({
+        query: { directory },
+        body: {
+          parentID: sessionID,
+          title: 'Explorer',
+        },
+      });
       const childID = createResult.data?.id;
       if (!childID) return 'Failed to create child session';
 
-      await client.session.prompt({
-        path: { id: childID },
-        body: {
-          agent: 'explorer',
-          parts: [{ type: 'text', text: args.query }],
+      await promptWithAbort(
+        client,
+        {
+          path: { id: childID },
+          body: {
+            agent: 'explorer',
+            parts: [{ type: 'text', text: args.query }],
+          },
         },
-      });
+        abortSignal,
+      );
 
-      return (await extractSessionText(client, childID)) || '(no output)';
+      return (
+        (await extractSessionText(client, childID, directory)) || '(no output)'
+      );
     },
   });
 }

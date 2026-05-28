@@ -1,6 +1,10 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import { extractSessionText } from '../utils/session';
+import {
+  extractSessionText,
+  getAbortSignal,
+  promptWithAbort,
+} from '../utils/session';
 
 const HEAD_TAIL_PIPE_RE =
   /\s*\|\s*(head|tail)\s+(?:-n\s*|-)\d+(?=\s*(?:[;&\n#]|$))/g;
@@ -72,27 +76,49 @@ export function createBasherTool(ctx: PluginInput): ToolDefinition {
         .describe('What to look for in the output. Be specific.'),
     },
 
-    async execute(args) {
+    async execute(args, context) {
+      const directory =
+        context && typeof context === 'object' && 'directory' in context
+          ? (context as { directory: string }).directory
+          : ctx.directory;
+      const sessionID =
+        context && typeof context === 'object' && 'sessionID' in context
+          ? (context as { sessionID: string }).sessionID
+          : undefined;
+      const abortSignal = getAbortSignal(context);
+
       const { script } = stripHeadTailPipes(args.command);
 
-      const createResult = await client.session.create();
+      const createResult = await client.session.create({
+        query: { directory },
+        body: {
+          parentID: sessionID,
+          title: 'Basher',
+        },
+      });
       const childID = createResult.data?.id;
       if (!childID) return 'Failed to create child session';
 
-      await client.session.prompt({
-        path: { id: childID },
-        body: {
-          agent: 'basher',
-          parts: [
-            {
-              type: 'text',
-              text: buildPrompt(script, args.what_to_summarize),
-            },
-          ],
+      await promptWithAbort(
+        client,
+        {
+          path: { id: childID },
+          body: {
+            agent: 'basher',
+            parts: [
+              {
+                type: 'text',
+                text: buildPrompt(script, args.what_to_summarize),
+              },
+            ],
+          },
         },
-      });
+        abortSignal,
+      );
 
-      return (await extractSessionText(client, childID)) || '(no output)';
+      return (
+        (await extractSessionText(client, childID, directory)) || '(no output)'
+      );
     },
   });
 }
