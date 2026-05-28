@@ -356,6 +356,27 @@ export function createWithReviewNudgeHook(ctx: PluginInput) {
         );
         if (open.length > 0) return;
 
+        // If the last assistant message contains <skip-review-check />, suppress the nudge
+        try {
+          const msgResult = await ctx.client.session.messages({
+            path: { id: sessionID },
+          });
+          const messages = (msgResult.data ?? []) as Array<{
+            info?: { role?: string };
+            parts?: Array<{ type?: string; text?: string }>;
+          }>;
+          const lastAssistant = [...messages].reverse().find((m) => m.info?.role === 'assistant');
+          if (lastAssistant) {
+            const fullText = (lastAssistant.parts ?? [])
+              .filter((p) => p.type === 'text' && p.text)
+              .map((p) => p.text!)
+              .join('\n');
+            if (fullText.includes('<skip-review-check />')) return;
+          }
+        } catch {
+          // best-effort
+        }
+
         try {
           await ctx.client.session.prompt({
             path: { id: sessionID },
