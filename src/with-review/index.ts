@@ -7,7 +7,6 @@ import {
 } from '../utils/session';
 
 const COMMAND_NAME = 'with-review';
-const INTERNAL_MARKER = '<!-- CAPS_INTERNAL_INITIATOR -->';
 
 const REVIEW_CRITERIA = `# Evaluation Criteria
 
@@ -92,13 +91,6 @@ function setReviewSession(sessionID: string, active: boolean): void {
   }
 }
 
-function createInternalAgentTextPart(text: string): {
-  type: 'text';
-  text: string;
-} {
-  return { type: 'text', text: `${text}\n${INTERNAL_MARKER}` };
-}
-
 export function createWithReviewCommandManager(_ctx: PluginInput) {
   function registerCommand(opencodeConfig: Record<string, unknown>): void {
     const configCommand = opencodeConfig.command as
@@ -135,9 +127,7 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
 
     if (isReviewSession(sessionID)) {
       output.parts.push(
-        createInternalAgentTextPart(
-          'with-review mode is already active. Submit your work via submit_review.',
-        ),
+        { type: 'text', text: 'with-review mode is already active. Submit your work via submit_review.' },
       );
       return;
     }
@@ -147,13 +137,12 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
     if (entry) entry.originalTask = task;
 
     output.parts.push(
-      createInternalAgentTextPart(
+      { type: 'text', text:
         `Task (with-review): ${task}\n\n` +
           'with-review mode is active. Complete the task above, then call submit_review with:\n' +
           '- report: a detailed description of what you did and why\n' +
           '- affectedFiles: list of every file you modified or created\n\n' +
-          'A reviewer will examine your submission. If accepted, you are done. If rejected, you will receive specific feedback to address.',
-      ),
+          'A reviewer will examine your submission. If accepted, you are done. If rejected, you will receive specific feedback to address.' },
     );
   }
 

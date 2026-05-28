@@ -156,21 +156,6 @@ describe('createWithReviewCommandManager', () => {
       expect(output.parts[0]?.text).toContain('already active');
     });
 
-    test('output contains internal marker', async () => {
-      const manager = createWithReviewCommandManager(createMockContext());
-      const output = createOutput();
-
-      await manager.handleCommandExecuteBefore(
-        {
-          command: 'with-review',
-          sessionID: 'ses-1',
-          arguments: 'do something',
-        },
-        output,
-      );
-
-      expect(output.parts[0]?.text).toContain('CAPS_INTERNAL_INITIATOR');
-    });
   });
 });
 
