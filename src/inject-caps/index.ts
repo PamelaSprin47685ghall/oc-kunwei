@@ -138,7 +138,7 @@ export function createCapitalsContextHook(
       )
         return;
 
-      output.system.push(cachedContext);
+      output.system.unshift(cachedContext);
     },
   };
 }
