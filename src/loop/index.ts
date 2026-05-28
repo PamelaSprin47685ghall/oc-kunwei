@@ -6,7 +6,7 @@ import {
   promptWithAbort,
 } from '../utils/session';
 
-const COMMAND_NAME = 'with-review';
+const COMMAND_NAME = 'loop';
 
 const REVIEW_CRITERIA = `# Evaluation Criteria
 
@@ -44,7 +44,7 @@ const REVIEWER_NUDGE_PROMPT =
 const MAX_REVIEWER_NUDGES = 3;
 
 const NUDGE_PROMPT =
-  'You are in with-review mode. You must call the submit_review tool to\n' +
+  'You are in loop mode. You must call the submit_review tool to\n' +
   'submit your detailed report and list of modified files for review\n' +
   'before finishing. Do not end the conversation without calling submit_review.';
 
@@ -91,7 +91,7 @@ function setReviewSession(sessionID: string, active: boolean): void {
   }
 }
 
-export function createWithReviewCommandManager(_ctx: PluginInput) {
+export function createLoopCommandManager(_ctx: PluginInput) {
   function registerCommand(opencodeConfig: Record<string, unknown>): void {
     const configCommand = opencodeConfig.command as
       | Record<string, unknown>
@@ -101,9 +101,9 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
         opencodeConfig.command = {};
       }
       (opencodeConfig.command as Record<string, unknown>)[COMMAND_NAME] = {
-        template: 'Enable with-review mode.',
+        template: 'Enable loop mode.',
         description:
-          'Enable with-review mode — the next submission must pass through a reviewer before being accepted',
+          'Enable loop mode — the next submission must pass through a reviewer before being accepted',
       };
     }
   }
@@ -124,7 +124,7 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
     if (!task) {
       const sid = input.sessionID;
       setReviewSession(sid, false);
-      output.parts.push({ type: 'text', text: 'with-review mode cancelled.' });
+      output.parts.push({ type: 'text', text: 'loop mode cancelled.' });
       return;
     }
 
@@ -132,7 +132,7 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
 
     if (isReviewSession(sessionID)) {
       output.parts.push(
-        { type: 'text', text: 'with-review mode is already active. Submit your work via submit_review.' },
+        { type: 'text', text: 'loop mode is already active. Submit your work via submit_review.' },
       );
       return;
     }
@@ -143,8 +143,8 @@ export function createWithReviewCommandManager(_ctx: PluginInput) {
 
     output.parts.push(
       { type: 'text', text:
-        `Task (with-review): ${task}\n\n` +
-          'with-review mode is active. Complete the task above, then call submit_review with:\n' +
+        `Task (loop): ${task}\n\n` +
+          'loop mode is active. Complete the task above, then call submit_review with:\n' +
           '- report: a detailed description of what you did and why\n' +
           '- affectedFiles: list of every file you modified or created\n\n' +
           'A reviewer will examine your submission. If accepted, you are done. If rejected, you will receive specific feedback to address.' },
@@ -254,7 +254,7 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Submit work for review. Only available during with-review mode (activated by /with-review).',
+      'Submit work for review. Only available during loop mode (activated by /loop).',
 
     args: {
       report: tool.schema
@@ -317,15 +317,15 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
 
       if (result.feedback == null) {
         setReviewSession(context.sessionID, false);
-        return 'Review passed. Your changes have been accepted. with-review mode has ended.';
+        return 'Review passed. Your changes have been accepted. loop mode has ended.';
       }
 
-      return `Review feedback:\n\n${result.feedback}\n\nAddress the feedback above. with-review mode is still active — fix the issues and call submit_review again.`;
+      return `Review feedback:\n\n${result.feedback}\n\nAddress the feedback above. loop mode is still active — fix the issues and call submit_review again.`;
     },
   });
 }
 
-export function createWithReviewNudgeHook(ctx: PluginInput) {
+export function createLoopNudgeHook(ctx: PluginInput) {
   let suppressUntil = 0;
 
   return {

@@ -17,9 +17,9 @@ import { createReverieTool, getReverieConfig } from './reverie/index.js';
 import {
   createSubmitReviewResultTool,
   createSubmitReviewTool,
-  createWithReviewCommandManager,
-  createWithReviewNudgeHook,
-} from './with-review/index.js';
+  createLoopCommandManager,
+  createLoopNudgeHook,
+} from './loop/index.js';
 
 const { agents: basherAgents } = getBasherConfig();
 const { agents: editorAgents } = getEditorConfig();
@@ -29,8 +29,8 @@ const { agents: reverieAgents } = getReverieConfig();
 const CapsPlugin: Plugin = async (ctx) => {
   const capitalsContextHook = createCapitalsContextHook(ctx.directory);
   const nudgeTodoHook = createNudgeTodoHook(ctx);
-  const withReviewCommandManager = createWithReviewCommandManager(ctx);
-  const withReviewNudgeHook = createWithReviewNudgeHook(ctx);
+  const loopCommandManager = createLoopCommandManager(ctx);
+  const loopNudgeHook = createLoopNudgeHook(ctx);
 
   return {
     name: 'caps-context',
@@ -68,7 +68,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         },
       };
 
-      withReviewCommandManager.registerCommand(opencodeConfig);
+      loopCommandManager.registerCommand(opencodeConfig);
 
       const agentConfig = opencodeConfig.agent as Record<string, unknown>;
       for (const [name, entry] of Object.entries(agentConfig)) {
@@ -112,14 +112,14 @@ const CapsPlugin: Plugin = async (ctx) => {
       },
       output: { parts: Array<{ type: string; text?: string }> },
     ): Promise<void> => {
-      await withReviewCommandManager.handleCommandExecuteBefore(input, output);
+      await loopCommandManager.handleCommandExecuteBefore(input, output);
     },
 
     event: async (input: {
       event: { type: string; properties?: Record<string, unknown> };
     }): Promise<void> => {
       await nudgeTodoHook.handleEvent(input);
-      await withReviewNudgeHook.handleEvent(input);
+      await loopNudgeHook.handleEvent(input);
     },
   };
 };

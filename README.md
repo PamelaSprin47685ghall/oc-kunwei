@@ -26,7 +26,7 @@ This means the orchestrator can only orchestrate. It must explicitly choose whic
 
 ### ✅ Review-Gated Development
 
-The `/with-review` command activates a one-shot review gate: the LLM works on a task, submits a report via `submit_review`, and a dedicated reviewer agent (sandboxed in the explorer agent) evaluates the work against eight rigorous criteria. The result is either **accepted** (feedback is `null`) or **rejected** with specific, actionable feedback.
+The `/loop` command activates a one-shot review gate: the LLM works on a task, submits a report via `submit_review`, and a dedicated reviewer agent (sandboxed in the explorer agent) evaluates the work against eight rigorous criteria. The result is either **accepted** (feedback is `null`) or **rejected** with specific, actionable feedback.
 
 ### 📄 Context Injection via CAPS Files
 
@@ -138,7 +138,7 @@ Returns: title, byline, content length, and the extracted content.
 
 ### `submit_review`
 
-Submit work for review. **Only available during `/with-review` mode.**
+Submit work for review. **Only available during `/loop` mode.**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -165,7 +165,7 @@ The reviewer's tool for submitting a verdict. **Only available to the reviewer s
 
 | Command | Description |
 |---------|-------------|
-| **`/with-review <task>`** | Activates one-shot review-gated mode. Rewrites the task into a structured prompt that tells the LLM to complete the work and then call `submit_review`. The mode ends after the review is resolved. |
+| **`/loop <task>`** | Activates one-shot review-gated mode. Rewrites the task into a structured prompt that tells the LLM to complete the work and then call `submit_review`. The mode ends after the review is resolved. |
 
 ---
 
@@ -234,13 +234,13 @@ The reviewer's tool for submitting a verdict. **Only available to the reviewer s
 
 This hook runs on every `bash` invocation, including those from subagents. The pipe-stripping logic is recursive — multiple pipes are all removed, and each removal is recorded for diagnostics.
 
-### `command.execute.before` (`/with-review` interception)
+### `command.execute.before` (`/loop` interception)
 
 | Trigger | Action |
 |---------|--------|
-| User types `/with-review <task>` | Intercepts the command, flags the session as review-gated, and rewrites the prompt into a structured instruction: "Complete the task, then call `submit_review` with a report and affected files list. A reviewer will examine your submission." |
+| User types `/loop <task>` | Intercepts the command, flags the session as review-gated, and rewrites the prompt into a structured instruction: "Complete the task, then call `submit_review` with a report and affected files list. A reviewer will examine your submission." |
 
-The command registration in `opencodeConfig` sets up `/with-review` as a proper opencode command with description and template.
+The command registration in `opencodeConfig` sets up `/loop` as a proper opencode command with description and template.
 
 ### `event` (session.idle — nudge hooks)
 
@@ -249,9 +249,9 @@ Two independent nudge hooks run on idle events:
 | Hook | Condition | Action |
 |------|-----------|--------|
 | **nudge-todo** | Session is idle AND there are incomplete todos (not `completed` or `cancelled`) | Prompts the LLM: *"There are still incomplete todos. Continue working through the remaining items."* |
-| **with-review nudge** | Session is idle AND session is in `/with-review` mode AND there are **no** open todos (todos take priority) | Prompts the LLM: *"You must call `submit_review` before finishing."* |
+| **loop nudge** | Session is idle AND session is in `/loop` mode AND there are **no** open todos (todos take priority) | Prompts the LLM: *"You must call `submit_review` before finishing."* |
 
-The with-review nudge runs **only** if todos are complete — incomplete todos suppress the review nudge. Both nudges have a 5-second suppression window after an abort error.
+The loop nudge runs **only** if todos are complete — incomplete todos suppress the review nudge. Both nudges have a 5-second suppression window after an abort error.
 
 ### `experimental.chat.system.transform` (CAPS context injection)
 
@@ -268,7 +268,7 @@ The with-review nudge runs **only** if todos are complete — incomplete todos s
 
 ---
 
-## Workflow: `/with-review` Deep Dive
+## Workflow: `/loop` Deep Dive
 
 ### Evaluation Criteria
 
@@ -286,7 +286,7 @@ The reviewer evaluates submissions against eight criteria:
 ### Flow Diagram
 
 ```
-User: /with-review Refactor the auth module to use JWT
+User: /loop Refactor the auth module to use JWT
 
   ┌─────────────────────────────────────────────────────────────────┐
   │  command.execute.before intercepts                              │
@@ -299,7 +299,7 @@ User: /with-review Refactor the auth module to use JWT
   │  (can use basher, editor, explorer, reverie, websearch, etc.)   │
   │                                                                  │
   │  ○ If session goes idle with open todos → nudge-todo fires       │
-  │  ○ If session goes idle with no todos → with-review nudge fires  │
+  │  ○ If session goes idle with no todos → loop nudge fires  │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
@@ -330,14 +330,14 @@ User: /with-review Refactor the auth module to use JWT
   ┌─────────────────────────────────────────────────────────────────┐
   │  Review result returned to LLM:                                  │
   │                                                                  │
-  │  If ACCEPTED: "Review passed. with-review mode has ended."       │
+  │  If ACCEPTED: "Review passed. loop mode has ended."       │
   │                                                                  │
   │  If REJECTED: "Review feedback:\n...\nAddress the feedback       │
-  │  above. with-review mode has ended — you may continue normally." │
+  │  above. loop mode has ended — you may continue normally." │
   └─────────────────────────────────────────────────────────────────┘
 
   ┌─────────────────────────────────────────────────────────────────┐
-  │  with-review mode ends (one-shot)                                │
+  │  loop mode ends (one-shot)                                │
   │  → Session is no longer review-gated                            │
   │  → LLM may continue working normally                            │
   └─────────────────────────────────────────────────────────────────┘
@@ -419,8 +419,8 @@ export default {
   config: (opencodeConfig) => { /* configure agents, permissions, commands */ },
   'experimental.chat.system.transform': /* CAPS context injection */,
   'tool.execute.before': /* bash timeout + pipe stripping */,
-  'command.execute.before': /* /with-review interception */,
-  'event': /* nudge-todo + with-review nudge */,
+  'command.execute.before': /* /loop interception */,
+  'event': /* nudge-todo + loop nudge */,
 };
 ```
 
@@ -514,7 +514,7 @@ Tests are co-located with source files (`*.test.ts`). The test runner is `bun:te
 | `src/nudge-todo/index.test.ts` | Todo nudge event handling |
 | `src/ollama-web/index.test.ts` | Web search/fetch tool configuration |
 | `src/refer-caps/index.test.ts` | CAPS file discovery and context building |
-| `src/with-review/index.test.ts` | Review workflow, nudging, session management |
+| `src/loop/index.test.ts` | Review workflow, nudging, session management |
 
 ---
 
@@ -540,7 +540,7 @@ The plugin will automatically:
 - Register all tools (`basher`, `editor`, `explorer`, `reverie`, `websearch`, `webfetch`, `submit_review`, `submit_review_result`).
 - Configure all agents with their respective permissions.
 - Disable `glob`, `grep`, and `task` tools on the orchestrator.
-- Register the `/with-review` command.
+- Register the `/loop` command.
 - Set up all hooks (bash timeout/pipe-stripping, command interception, nudge hooks, CAPS context injection).
 
 ### Verifying Installation
@@ -550,7 +550,7 @@ After adding the plugin and restarting opencode, you should see:
 ```
 Plugin 'caps-context' loaded
   Registered tools: basher, editor, explorer, reverie, websearch, webfetch, submit_review, submit_review_result
-  Registered command: /with-review
+  Registered command: /loop
 ```
 
 ---
@@ -580,7 +580,7 @@ oc-kunwei/
 │   │   ├── index.ts               # createReverieTool, getReverieConfig
 │   │   └── index.test.ts          # Unit tests for reverie tool
 │   │
-│   ├── with-review/               # /with-review command + review workflow
+│   ├── loop/               # /loop command + review workflow
 │   │   ├── index.ts               # Command manager, submit_review, submit_review_result, reviewer nudge logic
 │   │   └── index.test.ts          # Unit tests for review workflow
 │   │
@@ -617,7 +617,7 @@ oc-kunwei/
 | `src/editor/` | File editing delegation. The editor subagent can read, write, and edit files, plus run verification commands via `basher`. |
 | `src/explorer/` | Read-only code exploration using semble MCP for semantic search. Used as the base agent for the reviewer. |
 | `src/reverie/` | Pure text thinking — creates a sub-session with no tools and a minimal system prompt focused on deep contemplation. |
-| `src/with-review/` | The complete review-gated workflow: command interception, `submit_review` tool, `submit_review_result` tool, reviewer nudge logic (up to 3 nudges), and session state management. |
+| `src/loop/` | The complete review-gated workflow: command interception, `submit_review` tool, `submit_review_result` tool, reviewer nudge logic (up to 3 nudges), and session state management. |
 | `src/nudge-todo/` | Idle detection hook that prompts the LLM to continue working when there are incomplete todos. |
 | `src/ollama-web/` | Web search (`websearch`) and URL fetch (`webfetch`) tools backed by the ollama.com API. Requires an API key. |
 | `src/refer-caps/` | System prompt augmentation: discovers `*_CAPS.md` files and `*_CAPS/` directories at the project root and injects their contents into the system prompt. Results are cached after first build. |

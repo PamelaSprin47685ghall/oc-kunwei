@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
-  createWithReviewCommandManager,
-  createWithReviewNudgeHook,
+  createLoopCommandManager,
+  createLoopNudgeHook,
   createSubmitReviewResultTool,
   isReviewSession,
   reviewSessions,
@@ -60,10 +60,10 @@ describe('reviewSessions state', () => {
   });
 });
 
-describe('createWithReviewCommandManager', () => {
+describe('createLoopCommandManager', () => {
   describe('registerCommand', () => {
-    test('registers the /with-review command', () => {
-      const manager = createWithReviewCommandManager(createMockContext());
+    test('registers the /loop command', () => {
+      const manager = createLoopCommandManager(createMockContext());
       const config: Record<string, unknown> = {};
 
       manager.registerCommand(config);
@@ -72,28 +72,28 @@ describe('createWithReviewCommandManager', () => {
         string,
         { template: string; description: string }
       >;
-      expect(commands['with-review']).toBeDefined();
-      expect(commands['with-review'].description).toContain('review');
+      expect(commands['loop']).toBeDefined();
+      expect(commands['loop'].description).toContain('review');
     });
 
     test('does not overwrite existing command', () => {
-      const manager = createWithReviewCommandManager(createMockContext());
+      const manager = createLoopCommandManager(createMockContext());
       const existing = { template: 'custom', description: 'custom' };
       const config: Record<string, unknown> = {
-        command: { 'with-review': existing },
+        command: { 'loop': existing },
       };
 
       manager.registerCommand(config);
 
       expect(
-        (config.command as Record<string, unknown>)['with-review'],
+        (config.command as Record<string, unknown>)['loop'],
       ).toBe(existing);
     });
   });
 
   describe('handleCommandExecuteBefore', () => {
-    test('ignores non-with-review commands', async () => {
-      const manager = createWithReviewCommandManager(createMockContext());
+    test('ignores non-loop commands', async () => {
+      const manager = createLoopCommandManager(createMockContext());
       const output = createOutput();
 
       await manager.handleCommandExecuteBefore(
@@ -106,11 +106,11 @@ describe('createWithReviewCommandManager', () => {
     });
 
     test('swallows command with empty arguments', async () => {
-      const manager = createWithReviewCommandManager(createMockContext());
+      const manager = createLoopCommandManager(createMockContext());
       const output = createOutput();
 
       await manager.handleCommandExecuteBefore(
-        { command: 'with-review', sessionID: 'ses-1', arguments: '' },
+        { command: 'loop', sessionID: 'ses-1', arguments: '' },
         output,
       );
 
@@ -119,12 +119,12 @@ describe('createWithReviewCommandManager', () => {
     });
 
     test('rewrites task arguments into structured prompt', async () => {
-      const manager = createWithReviewCommandManager(createMockContext());
+      const manager = createLoopCommandManager(createMockContext());
       const output = createOutput();
 
       await manager.handleCommandExecuteBefore(
         {
-          command: 'with-review',
+          command: 'loop',
           sessionID: 'ses-1',
           arguments: 'Refactor the auth module',
         },
@@ -133,19 +133,19 @@ describe('createWithReviewCommandManager', () => {
 
       expect(isReviewSession('ses-1')).toBe(true);
       expect(output.parts[0]?.text).toContain('Refactor the auth module');
-      expect(output.parts[0]?.text).toContain('with-review mode is active');
+      expect(output.parts[0]?.text).toContain('loop mode is active');
       expect(output.parts[0]?.text).toContain('submit_review');
       expect(output.parts[0]?.text).toContain('affectedFiles');
     });
 
     test('does not toggle — already active is a no-op', async () => {
       setReviewSession('ses-1', true);
-      const manager = createWithReviewCommandManager(createMockContext());
+      const manager = createLoopCommandManager(createMockContext());
       const output = createOutput();
 
       await manager.handleCommandExecuteBefore(
         {
-          command: 'with-review',
+          command: 'loop',
           sessionID: 'ses-1',
           arguments: 'some task',
         },
@@ -214,10 +214,10 @@ describe('createSubmitReviewResultTool', () => {
   });
 });
 
-describe('createWithReviewNudgeHook', () => {
-  test('does not nudge when session is not in with-review mode', async () => {
+describe('createLoopNudgeHook', () => {
+  test('does not nudge when session is not in loop mode', async () => {
     const ctx = createMockContext();
-    const hook = createWithReviewNudgeHook(ctx);
+    const hook = createLoopNudgeHook(ctx);
 
     await hook.handleEvent({
       event: { type: 'session.idle', properties: { sessionID: 'ses-1' } },
@@ -226,10 +226,10 @@ describe('createWithReviewNudgeHook', () => {
     expect(ctx.client.session.prompt).not.toHaveBeenCalled();
   });
 
-  test('nudges when session is in with-review mode and no open todos', async () => {
+  test('nudges when session is in loop mode and no open todos', async () => {
     const ctx = createMockContext();
     ctx.client.session.todo = mock(() => ({ data: [] }));
-    const hook = createWithReviewNudgeHook(ctx);
+    const hook = createLoopNudgeHook(ctx);
     setReviewSession('ses-1', true);
 
     await hook.handleEvent({
@@ -251,7 +251,7 @@ describe('createWithReviewNudgeHook', () => {
         },
       ],
     }));
-    const hook = createWithReviewNudgeHook(ctx);
+    const hook = createLoopNudgeHook(ctx);
     setReviewSession('ses-1', true);
 
     await hook.handleEvent({
@@ -263,7 +263,7 @@ describe('createWithReviewNudgeHook', () => {
 
   test('suppresses nudge after abort error', async () => {
     const ctx = createMockContext();
-    const hook = createWithReviewNudgeHook(ctx);
+    const hook = createLoopNudgeHook(ctx);
     setReviewSession('ses-1', true);
 
     await hook.handleEvent({
@@ -286,7 +286,7 @@ describe('createWithReviewNudgeHook', () => {
 
   test('ignores events without sessionID', async () => {
     const ctx = createMockContext();
-    const hook = createWithReviewNudgeHook(ctx);
+    const hook = createLoopNudgeHook(ctx);
 
     await hook.handleEvent({
       event: { type: 'session.idle', properties: {} },
