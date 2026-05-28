@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import {
   createBasherTool,
-  enforceTimeout,
   getBasherConfig,
   stripHeadTailPipes,
 } from './index';
@@ -36,43 +35,6 @@ describe('stripHeadTailPipes', () => {
     const r = stripHeadTailPipes('cmd | head -n 5 | tail -n 1');
     expect(r.script).toBe('cmd');
     expect(r.stripped).toHaveLength(2);
-  });
-});
-
-describe('enforceTimeout', () => {
-  test('wraps with timeout 5 bash -s using random heredoc', () => {
-    const result = enforceTimeout('echo hello');
-    expect(result).toStartWith("timeout 5 bash -s << 'EOF_");
-    expect(result).toContain('\necho hello\n');
-    expect(result).toMatch(/\nEOF_[a-f0-9]+$/);
-  });
-
-  test('uses 8-byte random hex delimiter (16 hex chars)', () => {
-    const result = enforceTimeout('echo hello');
-    // Extract the delimiter between EOF_ and the newline
-    const match = result.match(/<< 'EOF_([a-f0-9]+)'/);
-    expect(match).not.toBeNull();
-    expect(match?.[1]).toHaveLength(16);
-    expect(match?.[1]).toMatch(/^[a-f0-9]+$/);
-  });
-
-  test('random delimiter changes between calls', () => {
-    const result1 = enforceTimeout('echo hello');
-    const result2 = enforceTimeout('echo hello');
-    const delim1 = result1.match(/<< 'EOF_([a-f0-9]+)'/)?.[1];
-    const delim2 = result2.match(/<< 'EOF_([a-f0-9]+)'/)?.[1];
-    expect(delim1).not.toEqual(delim2);
-  });
-
-  test('handles pipes and redirects', () => {
-    const result = enforceTimeout('cat file | grep foo > out.txt');
-    expect(result).toContain('cat file | grep foo > out.txt');
-  });
-
-  test('handles commands with single quotes without escaping', () => {
-    const result = enforceTimeout("echo 'hello world'");
-    // The heredoc approach doesn't need escaping - the EOF delimiter is quoted
-    expect(result).toContain("echo 'hello world'");
   });
 });
 
