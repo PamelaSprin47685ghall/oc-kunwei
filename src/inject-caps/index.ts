@@ -1,4 +1,3 @@
-import type { Stats } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -19,32 +18,29 @@ export async function findCapsFiles(
 ): Promise<CapsFileInfo[]> {
   const results: CapsFileInfo[] = [];
 
-  let rootEntries: string[];
+  let rootEntries: import('node:fs').Dirent[];
   try {
-    rootEntries = await fs.readdir(projectRoot);
+    rootEntries = await fs.readdir(projectRoot, { withFileTypes: true });
   } catch {
     return results;
   }
 
   for (const entry of rootEntries) {
-    const fullPath = path.join(projectRoot, entry);
+    const fullPath = path.join(projectRoot, entry.name);
 
-    if (CAPS_FILE_RE.test(entry) && !EXCLUDED_FILE_NAMES.has(entry)) {
-      const info = await tryReadFile(fullPath, entry);
+    if (entry.isFile() && CAPS_FILE_RE.test(entry.name) && !EXCLUDED_FILE_NAMES.has(entry.name)) {
+      const info = await tryReadFile(fullPath, entry.name);
       if (info) results.push(info);
     }
 
-    if (CAPS_DIR_RE.test(entry) && !EXCLUDED_DIR_NAMES.has(entry)) {
-      const stat = await tryStat(fullPath);
-      if (stat?.isDirectory()) {
-        const dirFiles = await discoverFilesInDir(fullPath);
-        for (const filePath of dirFiles) {
-          const info = await tryReadFile(
-            filePath,
-            path.relative(projectRoot, filePath),
-          );
-          if (info) results.push(info);
-        }
+    if (entry.isDirectory() && CAPS_DIR_RE.test(entry.name) && !EXCLUDED_DIR_NAMES.has(entry.name)) {
+      const dirFiles = await discoverFilesInDir(fullPath);
+      for (const filePath of dirFiles) {
+        const info = await tryReadFile(
+          filePath,
+          path.relative(projectRoot, filePath),
+        );
+        if (info) results.push(info);
       }
     }
   }
@@ -64,14 +60,6 @@ async function tryReadFile(
     const content = await fs.readFile(filePath, 'utf-8');
     if (!content.trim()) return undefined;
     return { filePath, label, content };
-  } catch {
-    return undefined;
-  }
-}
-
-async function tryStat(p: string): Promise<Stats | undefined> {
-  try {
-    return await fs.stat(p);
   } catch {
     return undefined;
   }

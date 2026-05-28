@@ -2,7 +2,7 @@ import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
   extractSessionText,
-  getAbortSignal,
+  extractToolContext,
   promptWithAbort,
 } from '../utils/session';
 
@@ -248,6 +248,9 @@ async function runReviewerWithNudge(
 
     if (result.type === 'error') {
       reviewSessions.delete(childID);
+      if (result.error instanceof DOMException && result.error.name === 'AbortError') {
+        return { feedback: 'Review aborted.' };
+      }
       return { feedback: result.error instanceof Error ? result.error.message : String(result.error) };
     }
 
@@ -278,15 +281,7 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
     },
 
     async execute(args, context) {
-      const directory =
-        context && typeof context === 'object' && 'directory' in context
-          ? (context as { directory: string }).directory
-          : ctx.directory;
-      const sessionID =
-        context && typeof context === 'object' && 'sessionID' in context
-          ? (context as { sessionID: string }).sessionID
-          : undefined;
-      const abortSignal = getAbortSignal(context);
+      const { directory, sessionID, abortSignal } = extractToolContext(context, ctx.directory);
 
       if (!sessionID || !isReviewSession(sessionID)) {
         return 'You do not need review. Just continue with your work.';
@@ -327,7 +322,7 @@ export function createSubmitReviewTool(ctx: PluginInput): ToolDefinition {
       const result = await runReviewerWithNudge(client, childID, parts, directory, abortSignal);
 
       if (result.feedback == null) {
-        setReviewSession(context.sessionID, false);
+        setReviewSession(sessionID!, false);
         return 'Review passed. Your changes have been accepted. loop mode has ended.';
       }
 
@@ -364,7 +359,7 @@ export function createLoopNudgeHook(ctx: PluginInput) {
           });
           todos = result.data as typeof todos;
         } catch {
-          todos = [];
+          return;
         }
 
         const open = todos.filter(

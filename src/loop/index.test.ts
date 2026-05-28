@@ -161,7 +161,7 @@ describe('createLoopCommandManager', () => {
 
 describe('createSubmitReviewResultTool', () => {
   test('resolves pending result with null feedback (accept)', async () => {
-    setReviewSession('reviewer-1', false);
+    reviewSessions.set('reviewer-1', { active: false });
     const entry = reviewSessions.get('reviewer-1')!;
     entry.pendingResult = new Deferred<any>();
 
@@ -176,7 +176,7 @@ describe('createSubmitReviewResultTool', () => {
   });
 
   test('resolves pending result with feedback (reject)', async () => {
-    setReviewSession('reviewer-1', false);
+    reviewSessions.set('reviewer-1', { active: false });
     const entry = reviewSessions.get('reviewer-1')!;
     entry.pendingResult = new Deferred<any>();
 
@@ -200,7 +200,7 @@ describe('createSubmitReviewResultTool', () => {
   });
 
   test('treats empty string as null (accept)', async () => {
-    setReviewSession('reviewer-1', false);
+    reviewSessions.set('reviewer-1', { active: false });
     const entry = reviewSessions.get('reviewer-1')!;
     entry.pendingResult = new Deferred<any>();
 

@@ -62,6 +62,7 @@ const CapsPlugin: Plugin = async (ctx) => {
             | Record<string, unknown>
             | undefined),
           permission: {
+            ...((opencodeConfig.agent?.orchestrator as Record<string, unknown> | undefined)?.permission as Record<string, unknown> | undefined),
             bash: 'deny',
             edit: 'deny',
             write: 'deny',
@@ -72,7 +73,6 @@ const CapsPlugin: Plugin = async (ctx) => {
         },
       };
 
-      // Restore user's model settings (overwritten by plugin defaults)
       for (const name of [
         'basher',
         'editor',
@@ -83,11 +83,12 @@ const CapsPlugin: Plugin = async (ctx) => {
         const userEntry = userAgent[name] as
           | Record<string, unknown>
           | undefined;
+        if (!userEntry) continue;
         const agentEntry = (opencodeConfig.agent as Record<string, unknown>)[
           name
         ] as Record<string, unknown> | undefined;
-        if (agentEntry && userEntry?.model) {
-          agentEntry.model = userEntry.model;
+        if (agentEntry) {
+          Object.assign(agentEntry, userEntry);
         }
       }
 

@@ -43,6 +43,22 @@ export function getAbortSignal(context: unknown): AbortSignal | undefined {
   return undefined;
 }
 
+export function extractToolContext(
+  context: unknown,
+  fallbackDirectory: string,
+): { directory: string; sessionID: string | undefined; abortSignal: AbortSignal | undefined } {
+  const directory =
+    context && typeof context === 'object' && 'directory' in context
+      ? (context as { directory: string }).directory
+      : fallbackDirectory;
+  const sessionID =
+    context && typeof context === 'object' && 'sessionID' in context
+      ? (context as { sessionID: string }).sessionID
+      : undefined;
+  const abortSignal = getAbortSignal(context);
+  return { directory, sessionID, abortSignal };
+}
+
 /**
  * Call `client.session.prompt` with optional abort signal support.
  *
@@ -79,9 +95,6 @@ export async function promptWithAbort(
 
   try {
     await Promise.race([promptPromise, abortPromise]);
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') return;
-    throw err;
   } finally {
     signal.removeEventListener('abort', onAbort);
   }

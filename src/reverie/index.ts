@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import { getAbortSignal, runSubagent } from '../utils/session';
+import { extractToolContext, runSubagent } from '../utils/session';
 
 const REVERIE_SYSTEM_PROMPT =
   'You are in a quiet room with the texts and the question.\n' +
@@ -13,7 +13,6 @@ const REVERIE_SYSTEM_PROMPT =
 
 export function createReverieTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;
-  const directory = ctx.directory;
 
   return tool({
     description:
@@ -43,20 +42,12 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
     },
 
     async execute(args, context) {
-      const dir =
-        context && typeof context === 'object' && 'directory' in context
-          ? (context as { directory: string }).directory
-          : directory;
-      const sessionID =
-        context && typeof context === 'object' && 'sessionID' in context
-          ? (context as { sessionID: string }).sessionID
-          : undefined;
-      const abortSignal = getAbortSignal(context);
+      const { directory, sessionID, abortSignal } = extractToolContext(context, ctx.directory);
 
       const parts: Array<{ type: 'text'; text: string }> = [];
 
       for (const file of args.files) {
-        const fullPath = path.resolve(dir, file);
+        const fullPath = path.resolve(directory, file);
         try {
           const content = await fs.readFile(fullPath, 'utf-8');
           parts.push({
@@ -80,7 +71,7 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
         agent: 'reverie',
         title: 'Reverie',
         parts,
-        directory: dir,
+        directory,
         sessionID,
         abortSignal,
       });
