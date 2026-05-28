@@ -115,7 +115,7 @@ describe('createWithReviewCommandManager', () => {
       );
 
       expect(isReviewSession('ses-1')).toBe(false);
-      expect(output.parts).toHaveLength(0);
+      expect(output.parts[0]?.text).toContain('cancelled');
     });
 
     test('rewrites task arguments into structured prompt', async () => {
