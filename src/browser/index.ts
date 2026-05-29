@@ -47,6 +47,7 @@ export function getBrowserConfig() {
         mcps: ['stealth-browser-mcp'],
         permission: {
           read: 'allow',
+          'stealth-browser-mcp_*': 'allow',
           bash: 'deny',
           write: 'deny',
           edit: 'deny',

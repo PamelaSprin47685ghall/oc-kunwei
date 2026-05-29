@@ -162,6 +162,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
             grep: 'deny',
             task: 'deny',
             bash: 'deny',
+            'stealth-browser-mcp_*': 'deny',
           },
           mcps: [],
         } as Record<string, unknown>,
@@ -212,6 +213,9 @@ const KunweiPlugin: Plugin = async (ctx) => {
         const perm = ((agent.permission as Record<string, unknown>) ??
           {}) as Record<string, unknown>;
         perm.bash = 'deny';
+        if (_name !== 'browser') {
+          perm['stealth-browser-mcp_*'] = 'deny';
+        }
         agent.permission = perm;
       }
     },
