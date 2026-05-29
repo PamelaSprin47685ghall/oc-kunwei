@@ -19,6 +19,7 @@ export interface ActiveJob {
   bytesRead: number;
   status: 'running' | 'completed' | 'aborted';
   startTime: number;
+  closePromise: Promise<void>;
 }
 
 const activeJobs = new Map<string, ActiveJob>();
@@ -193,19 +194,7 @@ export async function execute(
     throw error;
   }
 
-  const job: ActiveJob = {
-    childProcess,
-    stdoutFile: logPath,
-    tempScriptPath,
-    bytesRead: 0,
-    status: 'running',
-    startTime,
-  };
-
-  activeJobs.set(sessionId, job);
-
-  childProcess.stdout?.pipe(writeStream);
-  childProcess.stderr?.pipe(writeStream);
+  let job: ActiveJob;
 
   const closePromise = new Promise<void>((resolve, reject) => {
     childProcess.on('close', () => {
@@ -224,9 +213,24 @@ export async function execute(
     });
   });
 
+  job = {
+    childProcess,
+    stdoutFile: logPath,
+    tempScriptPath,
+    bytesRead: 0,
+    status: 'running',
+    startTime,
+    closePromise,
+  };
+
+  activeJobs.set(sessionId, job);
+
+  childProcess.stdout?.pipe(writeStream);
+  childProcess.stderr?.pipe(writeStream);
+
   try {
     const isCompletedEarly = await Promise.race([
-      closePromise.then(() => true),
+      job.closePromise.then(() => true),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
     ]);
 
@@ -298,57 +302,45 @@ export async function wait(options: WaitOptions): Promise<WaitResult> {
     return result;
   }
 
-  return new Promise<WaitResult>((resolve) => {
-    const startTime = Date.now();
-    const checkInterval = 100;
+  await Promise.race([
+    job.closePromise,
+    new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  ]);
 
-    const check = () => {
-      const elapsed = Date.now() - startTime;
-      if (elapsed >= ms) {
-        const fullOutput = readFileSync(job.stdoutFile, 'utf-8');
-        const newOutput = fullOutput.substring(job.bytesRead).trim();
-        job.bytesRead = fullOutput.length;
+  const fullOutput = readFileSync(job.stdoutFile, 'utf-8');
+  const newOutput = fullOutput.substring(job.bytesRead).trim();
+  job.bytesRead = fullOutput.length;
 
-        if (job.status !== 'running') {
-          cleanupJob(sessionId);
-          resolve({
-            output: newOutput || '(no new output)',
-            completed: true,
-            message:
-              job.status === 'completed'
-                ? '[System] Task has completed.'
-                : '[System] Task was aborted.',
-          });
-          return;
-        }
-
-        if (!newOutput) {
-          resolve({
-            output: '',
-            completed: false,
-            message:
-              '[System] Task still running. No new output during this wait.\n' +
-              '⚠️ Risk warning: Output stream is silent. This strongly suggests the process may be hung ' +
-              'or stuck in an infinite loop. Evaluate the last few lines of output carefully.\n' +
-              'Unless you are sure it is doing heavy background computation, continued waiting is usually pointless. ' +
-              'The wise choice is to call abort() and redesign a more robust command.',
-          });
-          return;
-        }
-
-        resolve({
-          output: newOutput,
-          completed: false,
-          message: '[System] Task still running in background.',
-        });
-        return;
-      }
-
-      setTimeout(check, checkInterval);
+  if (job.status !== 'running') {
+    cleanupJob(sessionId);
+    return {
+      output: newOutput || '(no new output)',
+      completed: true,
+      message:
+        job.status === 'completed'
+          ? '[System] Task has completed.'
+          : '[System] Task was aborted.',
     };
+  }
 
-    setTimeout(check, checkInterval);
-  });
+  if (!newOutput) {
+    return {
+      output: '',
+      completed: false,
+      message:
+        '[System] Task still running. No new output during this wait.\n' +
+        '⚠️ Risk warning: Output stream is silent. This strongly suggests the process may be hung ' +
+        'or stuck in an infinite loop. Evaluate the last few lines of output carefully.\n' +
+        'Unless you are sure it is doing heavy background computation, continued waiting is usually pointless. ' +
+        'The wise choice is to call abort() and redesign a more robust command.',
+    };
+  }
+
+  return {
+    output: newOutput,
+    completed: false,
+    message: '[System] Task still running in background.',
+  };
 }
 
 export function abort(sessionId: string): string {
