@@ -27,6 +27,110 @@ const { agents: greperAgents } = getGreperConfig();
 const { agents: reverieAgents } = getReverieConfig();
 const { agents: reviewerAgents } = getReviewerConfig();
 
+// 全局、唯一的 Agent 工具权限分配表
+const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
+  orchestrator: {
+    basher: true,
+    editor: true,
+    greper: true,
+    reverie: true,
+    submit_review: true,
+    webfetch: true,
+    websearch: true,
+    submit_review_result: false,
+    bash: false,
+    edit: false,
+    write: false,
+    glob: false,
+    grep: false,
+    task: false,
+  },
+  basher: {
+    bash: true,
+    basher: false,
+    editor: false,
+    greper: false,
+    reverie: false,
+    submit_review: false,
+    submit_review_result: false,
+    webfetch: false,
+    websearch: false,
+    edit: false,
+    write: false,
+    glob: false,
+    grep: false,
+    task: false,
+  },
+  editor: {
+    read: true,
+    write: true,
+    edit: true,
+    basher: true,
+    greper: true,
+    editor: false,
+    reverie: false,
+    submit_review: false,
+    submit_review_result: false,
+    webfetch: false,
+    websearch: false,
+    bash: false,
+    glob: false,
+    grep: false,
+    task: false,
+  },
+  greper: {
+    read: true,
+    basher: true,
+    editor: false,
+    greper: false,
+    reverie: false,
+    submit_review: false,
+    submit_review_result: false,
+    webfetch: false,
+    websearch: false,
+    bash: false,
+    write: false,
+    edit: false,
+    glob: false,
+    grep: false,
+    task: false,
+  },
+  reviewer: {
+    read: true,
+    basher: true,
+    greper: true,
+    reverie: true,
+    submit_review_result: true,
+    submit_review: false,
+    editor: false,
+    webfetch: false,
+    websearch: false,
+    bash: false,
+    write: false,
+    edit: false,
+    glob: false,
+    grep: false,
+    task: false,
+  },
+  reverie: {
+    read: false,
+    write: false,
+    edit: false,
+    bash: false,
+    basher: false,
+    editor: false,
+    greper: false,
+    reverie: false,
+    submit_review: false,
+    submit_review_result: false,
+    webfetch: false,
+    websearch: false,
+    glob: false,
+    grep: false,
+    task: false,
+  },
+};
+
 const CapsPlugin: Plugin = async (ctx) => {
   const capitalsContextHook = createCapitalsContextHook(ctx.directory);
   const nudgeTodoHook = createNudgeTodoHook(ctx);
@@ -45,6 +149,17 @@ const CapsPlugin: Plugin = async (ctx) => {
       submit_review_result: createSubmitReviewResultTool(),
       webfetch: createOllamaWebFetchTool(),
       websearch: createOllamaWebSearchTool(),
+    },
+
+    'chat.message': async (input, output) => {
+      const agent = input.agent ?? 'orchestrator';
+      const allowedTools = AGENT_TOOLS_MAP[agent];
+      if (allowedTools) {
+        output.message.tools = {
+          ...output.message.tools,
+          ...allowedTools,
+        };
+      }
     },
 
     config: async (opencodeConfig) => {

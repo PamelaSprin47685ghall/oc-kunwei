@@ -47,7 +47,6 @@ export function getGreperConfig() {
       greper: {
         prompt: GREPER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        tools: { basher: true, editor: false, greper: false, reverie: false, submit_review: false, submit_review_result: false, webfetch: false, websearch: false },
         permission: { read: 'allow', glob: 'allow', bash: 'deny', edit: 'deny', write: 'deny', grep: 'deny', task: 'deny' } as Record<string, unknown>,
         mcps: ['semble'],
       },

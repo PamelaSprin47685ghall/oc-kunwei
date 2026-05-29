@@ -6,16 +6,6 @@ describe('getEditorConfig', () => {
     const cfg = getEditorConfig();
     expect(cfg.agents.editor.mode).toBe('subagent');
     expect(cfg.agents.editor.prompt).toContain('code editing');
-    expect(cfg.agents.editor.tools).toEqual({
-      basher: true,
-      greper: true,
-      editor: false,
-      reverie: false,
-      submit_review: false,
-      submit_review_result: false,
-      webfetch: false,
-      websearch: false,
-    });
     expect(cfg.agents.editor.permission).toMatchObject({
       read: 'allow',
       write: 'allow',

@@ -43,16 +43,6 @@ describe('getBasherConfig', () => {
     const cfg = getBasherConfig();
     expect(cfg.agents.basher.mode).toBe('subagent');
     expect(cfg.agents.basher.prompt).toContain('expert at analyzing');
-    expect(cfg.agents.basher.tools).toEqual({
-      basher: false,
-      editor: false,
-      greper: false,
-      reverie: false,
-      submit_review: false,
-      submit_review_result: false,
-      webfetch: false,
-      websearch: false,
-    });
     expect(cfg.agents.basher.permission).toMatchObject({
       bash: 'allow',
       edit: 'deny',

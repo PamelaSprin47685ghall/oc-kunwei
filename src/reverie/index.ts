@@ -88,17 +88,7 @@ export function getReverieConfig() {
       reverie: {
         prompt: REVERIE_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        tools: {
-          basher: false,
-          editor: false,
-          greper: false,
-          reverie: false,
-          submit_review: false,
-          submit_review_result: false,
-          webfetch: false,
-          websearch: false,
-        },
-        permission: { bash: 'deny', edit: 'deny', write: 'deny', glob: 'deny', grep: 'deny', task: 'deny', read: 'deny' },
+        permission: { bash: 'deny', edit: 'deny', write: 'deny', glob: 'deny', grep: 'deny', task: 'deny', read: 'deny' } as Record<string, unknown>,
       },
     },
   };

@@ -272,16 +272,6 @@ describe('createSubmitReviewTool', () => {
 
   test('reviewer config matches getReviewerConfig exactly', () => {
     const config = getReviewerConfig();
-    expect(config.agents?.reviewer?.tools).toEqual({
-      basher: true,
-      greper: true,
-      reverie: true,
-      submit_review_result: true,
-      editor: false,
-      submit_review: false,
-      webfetch: false,
-      websearch: false,
-    });
     expect(config.agents?.reviewer?.permission).toEqual({
       read: 'allow',
       bash: 'deny',

@@ -51,16 +51,6 @@ export function getEditorConfig() {
       editor: {
         prompt: EDITOR_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        tools: {
-          basher: true,
-          greper: true,
-          editor: false,
-          reverie: false,
-          submit_review: false,
-          submit_review_result: false,
-          webfetch: false,
-          websearch: false,
-        },
         permission: {
           read: 'allow',
           write: 'allow',

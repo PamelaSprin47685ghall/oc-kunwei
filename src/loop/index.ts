@@ -584,16 +584,6 @@ export function getReviewerConfig() {
       reviewer: {
         prompt: 'You are a code reviewer...',
         mode: 'subagent' as const,
-        tools: {
-          basher: true,
-          greper: true,
-          reverie: true,
-          submit_review_result: true,
-          editor: false,
-          submit_review: false,
-          webfetch: false,
-          websearch: false,
-        },
         permission: {
           read: 'allow',
           bash: 'deny',
