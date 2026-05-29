@@ -72,7 +72,9 @@ EOF_BUILD_PACKAGES
 tmux send-keys -t "build-packages" Enter
 \`\`\`
 
-**View logs:**
+**Step 4 — Return immediately.** Do NOT block, wait, or poll for output/completion. After sending Enter, immediately report the tmux session name and confirmation. The Orchestrator will retrieve logs separately when needed.
+
+**View logs (called separately by Orchestrator):**
 \`\`\`bash
 tmux capture-pane -p -t "build-packages"
 \`\`\`
@@ -87,7 +89,7 @@ You **MUST** choose descriptive, meaningful, and unique names for both the sessi
 
 ### Output Summary
 - For sync tasks: provide a clear summary of the output
-- For async tasks: report the tmux session name and log path, then later read the log file and summarize the final output`;
+- For async tasks: immediately return the tmux session name and confirmation after sending the command. Do NOT wait for, block on, or poll for completion. The Orchestrator retrieves logs separately when ready.`;
 
 function buildPrompt(command: string, what: string): string {
   return `Command:
