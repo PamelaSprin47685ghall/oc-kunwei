@@ -25,9 +25,11 @@ import {
 import { createRunnerNudgeHook } from './runner/nudge.js';
 import { createReverieTool, getReverieConfig } from './reverie/index.js';
 import { getMcpConfig } from './mcp/index.js';
+import { createBrowserTool, getBrowserConfig } from './browser/index.js';
 
 const { agents: editorAgents } = getEditorConfig();
 const { agents: runnerAgents } = getRunnerConfig();
+const { agents: browserAgents } = getBrowserConfig();
 const { agents: reverieAgents } = getReverieConfig();
 const { agents: reviewerAgents } = getReviewerConfig();
 const { agents: greperAgents } = getGreperConfig();
@@ -42,6 +44,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     webfetch: true,
     websearch: true,
     runner: true,
+    browser: true,
     submit_review_result: false,
     edit: false,
     write: false,
@@ -65,39 +68,9 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     grep: true,
     task: false,
   },
-  runner: {
-    runner_wait: true,
-    runner_abort: true,
-    runner: false,
-    editor: false,
-    greper: false,
-    reverie: false,
-    submit_review: false,
-    submit_review_result: false,
-    webfetch: false,
-    websearch: false,
-    read: false,
-    write: false,
-    edit: false,
-    glob: false,
-    grep: false,
-    task: false,
-  },
-  reviewer: {
+  browser: {
     read: true,
-    greper: true,
-    reverie: true,
-    submit_review_result: true,
-    runner: true,
-    submit_review: false,
-    editor: false,
-    webfetch: false,
-    websearch: false,
-    write: false,
-    edit: false,
-    glob: true,
-    grep: true,
-    task: false,
+    'stealth_browser_mcp_*': true,
   },
   reverie: {
     read: false,
@@ -138,6 +111,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
       webfetch: createOllamaWebFetchTool(),
       websearch: createOllamaWebSearchTool(),
       runner: createRunnerTool(ctx),
+      browser: createBrowserTool(ctx),
       glob: createFuzzyGlobTool(),
       grep: createFuzzyGrepTool(),
     },
@@ -162,6 +136,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
         ...reverieAgents,
         ...reviewerAgents,
         ...greperAgents,
+        ...browserAgents,
         orchestrator: {
           ...(opencodeConfig.agent?.orchestrator as
             | Record<string, unknown>
@@ -174,6 +149,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
             webfetch: true,
             websearch: true,
             runner: true,
+            browser: true,
             submit_review_result: false,
           },
           permission: {
@@ -183,6 +159,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
             grep: 'deny',
             task: 'deny',
             bash: 'deny',
+            'stealth_browser_mcp_*': 'deny',
           },
         } as Record<string, unknown>,
       };
@@ -193,6 +170,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
         'runner',
         'reverie',
         'reviewer',
+        'browser',
       ]) {
         const userEntry = userAgent[name] as
           | Record<string, unknown>
@@ -231,6 +209,10 @@ const KunweiPlugin: Plugin = async (ctx) => {
         const perm = ((agent.permission as Record<string, unknown>) ??
           {}) as Record<string, unknown>;
         perm.bash = 'deny';
+        const agentName = _name;
+        if (agentName !== 'browser') {
+          perm['stealth_browser_mcp_*'] = 'deny';
+        }
         agent.permission = perm;
       }
     },
