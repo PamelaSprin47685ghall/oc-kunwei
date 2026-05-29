@@ -19,11 +19,20 @@ import {
   createOllamaWebFetchTool,
   createOllamaWebSearchTool,
 } from './ollama-web/index.js';
+import {
+  createRunnerTool,
+  createRunnerExecuteTool,
+  createRunnerWaitTool,
+  createRunnerAbortTool,
+  getRunnerConfig,
+} from './runner/index.js';
+import { createRunnerNudgeHook } from './runner/nudge.js';
 import { createReverieTool, getReverieConfig } from './reverie/index.js';
 
 const { agents: basherAgents } = getBasherConfig();
 const { agents: editorAgents } = getEditorConfig();
 const { agents: greperAgents } = getGreperConfig();
+const { agents: runnerAgents } = getRunnerConfig();
 const { agents: reverieAgents } = getReverieConfig();
 const { agents: reviewerAgents } = getReviewerConfig();
 
@@ -37,6 +46,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     submit_review: true,
     webfetch: true,
     websearch: true,
+    runner: true,
     submit_review_result: false,
     bash: false,
     edit: false,
@@ -55,6 +65,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     submit_review_result: false,
     webfetch: false,
     websearch: false,
+    runner: false,
     edit: false,
     write: false,
     glob: false,
@@ -73,6 +84,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     submit_review_result: false,
     webfetch: false,
     websearch: false,
+    runner: false,
     bash: false,
     glob: false,
     grep: false,
@@ -88,7 +100,28 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     submit_review_result: false,
     webfetch: false,
     websearch: false,
+    runner: false,
     bash: false,
+    write: false,
+    edit: false,
+    glob: false,
+    grep: false,
+    task: false,
+  },
+  runner: {
+    runner_execute: true,
+    runner_wait: true,
+    runner_abort: true,
+    basher: false,
+    editor: false,
+    greper: false,
+    reverie: false,
+    submit_review: false,
+    submit_review_result: false,
+    webfetch: false,
+    websearch: false,
+    bash: false,
+    read: false,
     write: false,
     edit: false,
     glob: false,
@@ -105,6 +138,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     editor: false,
     webfetch: false,
     websearch: false,
+    runner: false,
     bash: false,
     write: false,
     edit: false,
@@ -125,6 +159,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     submit_review_result: false,
     webfetch: false,
     websearch: false,
+    runner: false,
     glob: false,
     grep: false,
     task: false,
@@ -136,6 +171,7 @@ const CapsPlugin: Plugin = async (ctx) => {
   const nudgeTodoHook = createNudgeTodoHook(ctx);
   const loopCommandManager = createLoopCommandManager(ctx);
   const loopNudgeHook = createLoopNudgeHook(ctx);
+  const runnerNudgeHook = createRunnerNudgeHook(ctx);
 
   return {
     name: 'caps-context',
@@ -149,6 +185,10 @@ const CapsPlugin: Plugin = async (ctx) => {
       submit_review_result: createSubmitReviewResultTool(),
       webfetch: createOllamaWebFetchTool(),
       websearch: createOllamaWebSearchTool(),
+      runner: createRunnerTool(ctx),
+      runner_execute: createRunnerExecuteTool(ctx),
+      runner_wait: createRunnerWaitTool(ctx),
+      runner_abort: createRunnerAbortTool(ctx),
     },
 
     'chat.message': async (input, output) => {
@@ -169,6 +209,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         ...basherAgents,
         ...editorAgents,
         ...greperAgents,
+        ...runnerAgents,
         ...reverieAgents,
         ...reviewerAgents,
         orchestrator: {
@@ -183,6 +224,7 @@ const CapsPlugin: Plugin = async (ctx) => {
             submit_review: true,
             webfetch: true,
             websearch: true,
+            runner: true,
             submit_review_result: false,
           },
           permission: {
@@ -200,6 +242,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         'basher',
         'editor',
         'greper',
+        'runner',
         'reverie',
         'reviewer',
       ]) {
@@ -223,7 +266,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         const agent = entry as Record<string, unknown>;
         const perm = ((agent.permission as Record<string, unknown>) ??
           {}) as Record<string, unknown>;
-        if (name === 'greper' || name === 'reviewer') {
+        if (name === 'greper' || name === 'reviewer' || name === 'runner') {
           if (!('semble_*' in perm)) perm['semble_*'] = 'allow';
         } else {
           if (!('semble_*' in perm)) perm['semble_*'] = 'deny';
@@ -289,6 +332,7 @@ const CapsPlugin: Plugin = async (ctx) => {
     }): Promise<void> => {
       await nudgeTodoHook.handleEvent(input);
       await loopNudgeHook.handleEvent(input);
+      await runnerNudgeHook.handleEvent(input);
     },
   };
 };
