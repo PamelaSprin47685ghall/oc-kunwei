@@ -16,26 +16,12 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Close the door. There is only the question and the texts before you.\n' +
-      'No tools. No commands. No escape. Just the silence and the thinking.\n' +
-      '\n' +
-      'Use this whenever a question deserves more than a glance.\n' +
-      'When you are curious about a design. When a piece of code\n' +
-      'puzzles you. When you need to understand a system before\n' +
-      'touching it. When a decision wants weighing, not rushing.\n' +
-      '\n' +
-      'Reverie is not a last resort — it is a practice.\n' +
-      'The strongest builders step back to think, every day.\n' +
-      '\n' +
-      'Give it any question worth asking. Give it the files\n' +
-      'that frame it. Close the door. Think.\n' +
-      '\n' +
-      'A must-try whenever a question arises.',
+      'Receive a natural-language intent or question for deep reasoning and delegate to the reverie agent.',
 
     args: {
-      question: tool.schema
+      intent: tool.schema
         .string()
-        .describe('The question to contemplate. The harder, the better.'),
+        .describe('A natural-language intent or question to contemplate.'),
       files: tool.schema
         .array(tool.schema.string())
         .describe('File paths to provide as context for the contemplation.'),
@@ -68,7 +54,7 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
       if (parts.length > 0) {
         parts.push({ type: 'text', text: '' });
       }
-      parts.push({ type: 'text', text: `Question:\n${args.question}` });
+      parts.push({ type: 'text', text: `Question:\n${args.intent}` });
 
       return runSubagent(client, {
         agent: 'reverie',

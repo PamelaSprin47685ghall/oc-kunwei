@@ -210,7 +210,6 @@ export function getRunnerConfig() {
         prompt: RUNNER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         permission: {
-          bash: 'deny',
           edit: 'deny',
           write: 'deny',
           glob: 'deny',

@@ -49,7 +49,7 @@ describe('createReverieTool', () => {
     const ctx = mockCtx();
     const reverie = createReverieTool(ctx);
     const result = await reverie.execute(
-      { question: 'Why is there a deadlock?', files: [] },
+      { intent: 'Why is there a deadlock?', files: [] },
       {} as any,
     );
     expect(result).toContain('deadlock');
@@ -61,7 +61,7 @@ describe('createReverieTool', () => {
     const ctx = mockCtx();
     const reverie = createReverieTool(ctx);
     await reverie.execute(
-      { question: 'Is this architecture sound?', files: [] },
+      { intent: 'Is this architecture sound?', files: [] },
       {} as any,
     );
     const promptArg = ctx.client.session.prompt.mock.calls[0][0];
@@ -76,7 +76,7 @@ describe('createReverieTool', () => {
   test('uses reverie agent', async () => {
     const ctx = mockCtx();
     const reverie = createReverieTool(ctx);
-    await reverie.execute({ question: 'What?', files: [] }, {} as any);
+    await reverie.execute({ intent: 'What?', files: [] }, {} as any);
     const promptArg = ctx.client.session.prompt.mock.calls[0][0];
     expect(promptArg.body.agent).toBe('reverie');
   });
@@ -85,7 +85,7 @@ describe('createReverieTool', () => {
     const ctx = mockCtx();
     const reverie = createReverieTool(ctx);
     await reverie.execute(
-      { question: 'Analyze this', files: ['src/main.ts', 'src/lib.ts'] },
+      { intent: 'Analyze this', files: ['src/main.ts', 'src/lib.ts'] },
       {} as any,
     );
     const promptArg = ctx.client.session.prompt.mock.calls[0][0];

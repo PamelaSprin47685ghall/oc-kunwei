@@ -12,19 +12,12 @@ export function createEditorTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Delegates code editing to a dedicated editor agent. ' +
-      'Provide a task description stating only WHAT to change (the intent/purpose). ' +
-      'Do NOT include old or new file contents — just describe the intent of the change. ' +
-      'The editor agent can read, edit, and write files, and run commands via basher.',
+      'Receive a natural-language intent for code changes and delegate to the editor agent.',
 
     args: {
-      task: tool.schema
+      intent: tool.schema
         .string()
-        .describe(
-          'Describe only WHAT to change and why. ' +
-            'State the intent of the edit (e.g., "change the button color to red", "add a null check before the call"). ' +
-            'Do NOT include old code or new code — just describe the desired change.',
-        ),
+        .describe('A natural-language intent describing the desired code changes.'),
     },
 
     async execute(args, context) {
@@ -36,7 +29,7 @@ export function createEditorTool(ctx: PluginInput): ToolDefinition {
       return runSubagent(client, {
         agent: 'editor',
         title: 'Editor',
-        parts: [{ type: 'text', text: args.task }],
+        parts: [{ type: 'text', text: args.intent }],
         directory,
         sessionID,
         abortSignal,

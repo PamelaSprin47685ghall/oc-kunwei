@@ -5,7 +5,7 @@
 [![Bun](https://img.shields.io/badge/Bun-≥1.3-black)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org)
 
-**oc-kunwei** 是一个 [opencode](https://opencode.ai) 插件，提供一套精选工具、专用子代理（subagent）和工作流命令，用于结构化、循环门控（loop-gated）的开发流程。它实现了**最小权限子代理委派**架构——编排器（orchestrator）从不直接操作文件或执行命令，所有工作都委派给拥有最小权限的专用子代理完成。
+**kunwei** 是一个 [opencode](https://opencode.ai) 插件，提供一套精选工具、专用子代理（subagent）和工作流命令，用于结构化、循环门控（loop-gated）的开发流程。它实现了**最小权限子代理委派**架构——编排器（orchestrator）从不直接操作文件或执行命令，所有工作都委派给拥有最小权限的专用子代理完成。
 
 ---
 
@@ -414,7 +414,7 @@ reverie 代理**没有任何工具**。其系统提示词设定了场景：*"没
 
 ```typescript
 export default {
-  name: 'caps-context',
+  name: 'kunwei',
   tool: { basher, editor, explorer, reverie, submit_review, submit_review_result, webfetch, websearch },
   config: (opencodeConfig) => { /* 配置代理、权限、命令 */ },
   'experimental.chat.system.transform': /* CAPS 上下文注入 */,
@@ -548,7 +548,7 @@ bun run check:ci
 添加插件并重启 opencode 后，应看到：
 
 ```
-Plugin 'caps-context' loaded
+Plugin 'kunwei' loaded
   Registered tools: basher, editor, explorer, reverie, websearch, webfetch, submit_review, submit_review_result
   Registered command: /loop
 ```

@@ -13,14 +13,12 @@ export function createGreperTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Search the codebase using semantic search. ' +
-      'Provide a natural-language query describing what code you are looking for. ' +
-      'The greper agent uses semble for semantic code search and can read files to provide detailed context.',
+      'Receive a natural-language intent for code search and delegate to the search agent.',
 
     args: {
-      query: tool.schema
+      intent: tool.schema
         .string()
-        .describe('Natural-language search query describing the code to find.'),
+        .describe('A natural-language intent describing the code to find.'),
     },
 
     async execute(args, context) {
@@ -32,7 +30,7 @@ export function createGreperTool(ctx: PluginInput): ToolDefinition {
       return runSubagent(client, {
         agent: 'greper',
         title: 'Greper',
-        parts: [{ type: 'text', text: args.query }],
+        parts: [{ type: 'text', text: args.intent }],
         directory,
         sessionID,
         abortSignal,
