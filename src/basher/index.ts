@@ -52,20 +52,24 @@ Before running a command, estimate its execution time:
 Run directly and return output inline.
 
 ### Slow Commands (tmux Async Execution)
-Run asynchronously via tmux using the load-buffer / paste-buffer / delete-buffer pattern with a random-bounded heredoc. This avoids escaping/quoting issues and temp file cleanup.
+Run asynchronously via tmux using the send-keys pattern with a random-bounded heredoc. This avoids escaping/quoting issues and temp file cleanup.
 
-**Step 1 — New session and load the command into tmux buffer:**
+**Step 1 — Start/obtain a detached tmux session:**
 \`\`\`bash
 tmux new-session -d -s "build-packages" -c "/home/user/project"
-tmux load-buffer -b "build-packages" <<'EOF_BUILD_PACKAGES'
-npm install
-EOF_BUILD_PACKAGES
 \`\`\`
 
-**Step 2 — Execute via paste-buffer, then clean up the buffer:**
+**Step 2 — Pass the command into send-keys using a random-bounded heredoc:**
 \`\`\`bash
-tmux paste-buffer -p -t "build-packages" -b "build-packages"
-tmux delete-buffer -b "build-packages"
+tmux send-keys -t "build-packages" -l "$(cat <<'EOF_BUILD_PACKAGES'
+npm install
+EOF_BUILD_PACKAGES
+)"
+\`\`\`
+
+**Step 3 — Trigger execution by sending the Enter key:**
+\`\`\`bash
+tmux send-keys -t "build-packages" Enter
 \`\`\`
 
 **View logs:**
