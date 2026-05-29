@@ -45,6 +45,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     websearch: true,
     runner: true,
     browser: true,
+    'stealth_browser_mcp_*': false,
     submit_review_result: false,
     edit: false,
     write: false,
@@ -67,6 +68,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     glob: true,
     grep: true,
     task: false,
+    'stealth_browser_mcp_*': false,
   },
   browser: {
     read: true,
@@ -84,6 +86,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     webfetch: false,
     websearch: false,
     runner: false,
+    'stealth_browser_mcp_*': false,
     glob: false,
     grep: false,
     task: false,
