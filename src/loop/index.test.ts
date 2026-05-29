@@ -281,7 +281,6 @@ describe('createSubmitReviewTool', () => {
       grep: 'deny',
       task: 'deny',
     });
-    expect(config.agents?.reviewer?.mcps).toContain('semble');
   });
 });
 

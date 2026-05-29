@@ -593,7 +593,6 @@ export function getReviewerConfig() {
           grep: 'deny',
           task: 'deny',
         } as Record<string, unknown>,
-        mcps: ['semble'],
       },
     },
   };

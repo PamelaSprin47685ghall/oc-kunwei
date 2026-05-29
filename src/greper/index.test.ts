@@ -12,14 +12,9 @@ describe('getGreperConfig', () => {
       bash: 'deny',
       edit: 'deny',
       write: 'deny',
-      grep: 'deny',
+      grep: 'allow',
       task: 'deny',
     });
-  });
-
-  test('has semble MCP', () => {
-    const cfg = getGreperConfig();
-    expect(cfg.agents.greper.mcps).toEqual(['semble']);
   });
 
   test('prompt warns against using basher for modifications', () => {

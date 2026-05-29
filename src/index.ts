@@ -11,6 +11,10 @@ import {
 } from './loop/index.js';
 import { createNudgeTodoHook } from './nudge-todo/index.js';
 import {
+  createFuzzyGlobTool,
+  createFuzzyGrepTool,
+} from './fuzzy/index.js';
+import {
   createOllamaWebFetchTool,
   createOllamaWebSearchTool,
 } from './ollama-web/index.js';
@@ -56,8 +60,8 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     websearch: false,
     write: false,
     edit: false,
-    glob: false,
-    grep: false,
+    glob: true,
+    grep: true,
     task: false,
   },
   runner: {
@@ -90,8 +94,8 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     websearch: false,
     write: false,
     edit: false,
-    glob: false,
-    grep: false,
+    glob: true,
+    grep: true,
     task: false,
   },
   reverie: {
@@ -131,6 +135,8 @@ const KunweiPlugin: Plugin = async (ctx) => {
       webfetch: createOllamaWebFetchTool(),
       websearch: createOllamaWebSearchTool(),
       runner: createRunnerTool(ctx),
+      glob: createFuzzyGlobTool(),
+      grep: createFuzzyGrepTool(),
     },
 
     'chat.message': async (input, output) => {
@@ -209,17 +215,12 @@ const KunweiPlugin: Plugin = async (ctx) => {
       loopCommandManager.registerCommand(opencodeConfig);
 
       const agentConfig = opencodeConfig.agent as Record<string, unknown>;
-      for (const [name, entry] of Object.entries(agentConfig)) {
+      for (const [_name, entry] of Object.entries(agentConfig)) {
         if (typeof entry !== 'object' || !entry) continue;
         const agent = entry as Record<string, unknown>;
         const perm = ((agent.permission as Record<string, unknown>) ??
           {}) as Record<string, unknown>;
         perm.bash = 'deny';
-        if (name === 'greper' || name === 'reviewer' || name === 'runner') {
-          if (!('semble_*' in perm)) perm['semble_*'] = 'allow';
-        } else {
-          if (!('semble_*' in perm)) perm['semble_*'] = 'deny';
-        }
         agent.permission = perm;
       }
     },
@@ -232,13 +233,13 @@ const KunweiPlugin: Plugin = async (ctx) => {
     },
 
     'tool.execute.before': async (
-      input: { tool: string; callID: string },
-      output: { args?: Record<string, unknown> },
+      _input: { tool: string; callID: string },
+      _output: { args?: Record<string, unknown> },
     ): Promise<void> => { },
 
     'tool.execute.after': async (
-      input: { tool: string; callID: string },
-      output: {
+      _input: { tool: string; callID: string },
+      _output: {
         output?: unknown;
         title?: string;
         metadata?: Record<string, unknown>;

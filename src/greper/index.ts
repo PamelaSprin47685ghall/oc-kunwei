@@ -3,8 +3,11 @@ import { tool } from '@opencode-ai/plugin/tool';
 import { extractToolContext, runSubagent } from '../utils/session';
 
 const GREPER_SYSTEM_PROMPT =
-  'You are a code exploration agent. Given a search query, use semble_search to find relevant code in the workspace. ' +
-  'Read the relevant files and provide a detailed summary of what you found, including file paths and key code sections. ' +
+  'You are a code exploration agent. Given a search query, explore the codebase to find relevant code in the workspace. ' +
+  'Use the `glob` tool to find files by name or path patterns. ' +
+  'Use the `grep` tool to search file contents for keywords, patterns, or code snippets. ' +
+  'After locating relevant files, use the `read` tool to read their contents. ' +
+  'Provide a detailed summary of what you found, including file paths and key code sections. ' +
   'You have access to basher for read-only exploration commands (e.g., listing files, checking git status). ' +
   'Do NOT use basher to modify files — if you need to make changes, stop and report back.';
 
@@ -45,8 +48,7 @@ export function getGreperConfig() {
       greper: {
         prompt: GREPER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        permission: { read: 'allow', glob: 'allow', bash: 'deny', edit: 'deny', write: 'deny', grep: 'deny', task: 'deny' } as Record<string, unknown>,
-        mcps: ['semble'],
+        permission: { read: 'allow', glob: 'allow', bash: 'deny', edit: 'deny', write: 'deny', grep: 'allow', task: 'deny' } as Record<string, unknown>,
       },
     },
   };
