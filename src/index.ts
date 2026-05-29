@@ -26,6 +26,7 @@ import { createRunnerNudgeHook } from './runner/nudge.js';
 import { createReverieTool, getReverieConfig } from './reverie/index.js';
 import { getMcpConfig } from './mcp/index.js';
 import { createBrowserTool, getBrowserConfig } from './browser/index.js';
+import { createSyntaxCheckHook } from './tree-sitter/index.js';
 
 const { agents: editorAgents } = getEditorConfig();
 const { agents: runnerAgents } = getRunnerConfig();
@@ -131,6 +132,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
   const loopCommandManager = createLoopCommandManager(ctx);
   const loopNudgeHook = createLoopNudgeHook(ctx);
   const runnerNudgeHook = createRunnerNudgeHook(ctx);
+  const syntaxCheckHook = createSyntaxCheckHook(ctx);
 
   return {
     name: 'kunwei',
@@ -264,13 +266,15 @@ const KunweiPlugin: Plugin = async (ctx) => {
     ): Promise<void> => { },
 
     'tool.execute.after': async (
-      _input: { tool: string; callID: string },
-      _output: {
+      input: { tool: string; callID: string },
+      output: {
         output?: unknown;
         title?: string;
         metadata?: Record<string, unknown>;
       },
-    ): Promise<void> => { },
+    ): Promise<void> => {
+      await (syntaxCheckHook as { 'tool.execute.after': (input: { tool: string; callID: string }, output: { output?: unknown; title?: string; metadata?: Record<string, unknown> }) => Promise<void> })['tool.execute.after'](input, output);
+    },
 
     'command.execute.before': async (
       input: {
