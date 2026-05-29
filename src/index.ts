@@ -21,6 +21,8 @@ import {
 import {
   createRunnerTool,
   getRunnerConfig,
+  createRunnerWaitTool,
+  createRunnerAbortTool,
 } from './runner/index.js';
 import { createRunnerNudgeHook } from './runner/nudge.js';
 import { createReverieTool, getReverieConfig } from './reverie/index.js';
@@ -46,17 +48,61 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     websearch: true,
     runner: true,
     browser: true,
-    'stealth_browser_mcp_*': false,
+    runner_wait: false,
+    runner_abort: false,
     submit_review_result: false,
     edit: false,
     write: false,
     glob: false,
     grep: false,
     task: false,
+    'stealth_browser_mcp_*': false,
+  },
+  editor: {
+    read: true,
+    write: true,
+    edit: true,
+    runner: true,
+    editor: false,
+    greper: false,
+    reverie: false,
+    submit_review: false,
+    submit_review_result: false,
+    webfetch: false,
+    websearch: false,
+    browser: false,
+    glob: false,
+    grep: false,
+    task: false,
+    runner_wait: false,
+    runner_abort: false,
+    'stealth_browser_mcp_*': false,
+  },
+  reviewer: {
+    read: true,
+    submit_review_result: true,
+    write: false,
+    edit: false,
+    editor: false,
+    greper: false,
+    reverie: false,
+    submit_review: false,
+    webfetch: false,
+    websearch: false,
+    runner: false,
+    browser: false,
+    glob: false,
+    grep: false,
+    task: false,
+    runner_wait: false,
+    runner_abort: false,
+    'stealth_browser_mcp_*': false,
   },
   greper: {
     read: true,
     runner: true,
+    glob: true,
+    grep: true,
     editor: false,
     greper: false,
     reverie: false,
@@ -66,13 +112,15 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     websearch: false,
     write: false,
     edit: false,
-    glob: true,
-    grep: true,
     task: false,
+    browser: false,
+    runner_wait: false,
+    runner_abort: false,
     'stealth_browser_mcp_*': false,
   },
   browser: {
     read: true,
+    'stealth_browser_mcp_*': true,
     write: false,
     edit: false,
     editor: false,
@@ -83,12 +131,16 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     webfetch: false,
     websearch: false,
     runner: false,
+    browser: false,
     glob: false,
     grep: false,
     task: false,
-    'stealth_browser_mcp_*': true,
+    runner_wait: false,
+    runner_abort: false,
   },
   runner: {
+    runner_wait: true,
+    runner_abort: true,
     read: false,
     write: false,
     edit: false,
@@ -101,10 +153,10 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     websearch: false,
     runner: false,
     browser: false,
-    'stealth_browser_mcp_*': false,
     glob: false,
     grep: false,
     task: false,
+    'stealth_browser_mcp_*': false,
   },
   reverie: {
     read: false,
@@ -118,10 +170,13 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     webfetch: false,
     websearch: false,
     runner: false,
-    'stealth_browser_mcp_*': false,
+    browser: false,
     glob: false,
     grep: false,
     task: false,
+    runner_wait: false,
+    runner_abort: false,
+    'stealth_browser_mcp_*': false,
   },
 };
 
@@ -150,6 +205,8 @@ const KunweiPlugin: Plugin = async (ctx) => {
       browser: createBrowserTool(ctx),
       glob: createFuzzyGlobTool(),
       grep: createFuzzyGrepTool(),
+      runner_wait: createRunnerWaitTool(),
+      runner_abort: createRunnerAbortTool(),
     },
 
     'chat.message': async (input, output) => {
@@ -187,6 +244,8 @@ const KunweiPlugin: Plugin = async (ctx) => {
             runner: true,
             browser: true,
             submit_review_result: false,
+            runner_wait: false,
+            runner_abort: false,
           },
           permission: {
             edit: 'deny',
@@ -196,6 +255,8 @@ const KunweiPlugin: Plugin = async (ctx) => {
             task: 'deny',
             bash: 'deny',
             'stealth-browser-mcp_*': 'deny',
+            runner_wait: 'deny',
+            runner_abort: 'deny',
           },
           mcps: [],
         } as Record<string, unknown>,
@@ -249,7 +310,24 @@ const KunweiPlugin: Plugin = async (ctx) => {
         if (_name !== 'browser') {
           perm['stealth-browser-mcp_*'] = 'deny';
         }
+        if (_name !== 'runner') {
+          perm.runner_wait = 'deny';
+          perm.runner_abort = 'deny';
+        }
+        if (_name !== 'reviewer') {
+          perm.submit_review_result = 'deny';
+        }
         agent.permission = perm;
+
+        const toolsMap = AGENT_TOOLS_MAP[_name];
+        if (toolsMap) {
+          const existingTools =
+            (agent.tools as Record<string, unknown> | undefined) ?? {};
+          agent.tools = {
+            ...existingTools,
+            ...toolsMap,
+          };
+        }
       }
     },
 

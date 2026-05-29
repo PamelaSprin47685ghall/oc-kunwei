@@ -8,6 +8,8 @@ import {
 } from '../utils/session';
 import {
   execute as executeCommand,
+  wait,
+  abort,
   cleanupJob,
   type ExecuteResult,
 } from './tools.js';
@@ -152,6 +154,50 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
         }
         cleanupJob(childID);
         throw err;
+      }
+    },
+  });
+}
+
+export function createRunnerWaitTool(): ToolDefinition {
+  return tool({
+    description: 'Wait for the background task to produce more output or finish.',
+    args: {
+      ms: tool.schema
+        .number()
+        .int()
+        .min(100)
+        .max(30000)
+        .default(2000)
+        .describe('Time to wait in milliseconds'),
+    },
+    async execute(args, context) {
+      try {
+        const result = await wait({
+          sessionId: context.sessionID,
+          ms: args.ms,
+        });
+        let output = result.output;
+        if (result.message) {
+          output = `${output}\n\n${result.message}`;
+        }
+        return output || '(no new output)';
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+      }
+    },
+  });
+}
+
+export function createRunnerAbortTool(): ToolDefinition {
+  return tool({
+    description: 'Forcefully terminate the currently running background task.',
+    args: {},
+    async execute(_args, context) {
+      try {
+        return abort(context.sessionID);
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
       }
     },
   });
