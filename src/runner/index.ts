@@ -109,15 +109,17 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
       if (!childID) return 'Failed to create child session';
 
       try {
+        const language = args.language ?? 'shell';
+
         const execResult: ExecuteResult = await executeCommand({
           sessionId: childID,
           program: args.program,
-          language: args.language,
+          language,
           dependencies: args.dependencies,
         });
 
         const prompt = buildRunnerPrompt(
-          args.language,
+          language,
           args.program,
           args.dependencies,
           args.what_to_summarize,
