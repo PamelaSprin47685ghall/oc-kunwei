@@ -60,22 +60,25 @@ const CapsPlugin: Plugin = async (ctx) => {
           ...(opencodeConfig.agent?.orchestrator as
             | Record<string, unknown>
             | undefined),
+          tools: {
+            basher: true,
+            editor: true,
+            greper: true,
+            reverie: true,
+            submit_review: true,
+            webfetch: true,
+            websearch: true,
+            submit_review_result: false,
+          },
           permission: {
-            ...((
-              opencodeConfig.agent?.orchestrator as
-                | Record<string, unknown>
-                | undefined
-            )?.permission as Record<string, unknown> | undefined),
             bash: 'deny',
-            submit_review: 'allow',
-            submit_review_result: 'deny',
             edit: 'deny',
             write: 'deny',
             glob: 'deny',
             grep: 'deny',
             task: 'deny',
-          } as Record<string, unknown>,
-        },
+          },
+        } as Record<string, unknown>,
       };
 
       for (const name of [

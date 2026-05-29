@@ -270,18 +270,26 @@ describe('createSubmitReviewTool', () => {
     expect(reviewSessions.tryLock('ses-1')).toBe(true);
   });
 
-  test('reviewer config has basher tool, read/bash permission, and semble MCP', () => {
+  test('reviewer config matches getReviewerConfig exactly', () => {
     const config = getReviewerConfig();
-    expect(config.agents?.reviewer?.tools?.basher).toBe(true);
-    expect(config.agents?.reviewer?.tools?.greper).toBe(true);
-    expect(config.agents?.reviewer?.tools?.reverie).toBe(true);
-    expect(config.agents?.reviewer?.permission).toMatchObject({
+    expect(config.agents?.reviewer?.tools).toEqual({
+      basher: true,
+      greper: true,
+      reverie: true,
+      submit_review_result: true,
+      editor: false,
+      submit_review: false,
+      webfetch: false,
+      websearch: false,
+    });
+    expect(config.agents?.reviewer?.permission).toEqual({
       read: 'allow',
       bash: 'deny',
-      basher: 'allow',
-      submit_review_result: 'allow',
-      greper: 'allow',
-      reverie: 'allow',
+      edit: 'deny',
+      write: 'deny',
+      glob: 'deny',
+      grep: 'deny',
+      task: 'deny',
     });
     expect(config.agents?.reviewer?.mcps).toContain('semble');
   });

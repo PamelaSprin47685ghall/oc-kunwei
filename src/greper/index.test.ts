@@ -6,16 +6,24 @@ describe('getGreperConfig', () => {
     const cfg = getGreperConfig();
     expect(cfg.agents.greper.mode).toBe('subagent');
     expect(cfg.agents.greper.prompt).toContain('code exploration');
-    expect(cfg.agents.greper.tools).toEqual({ basher: true });
+    expect(cfg.agents.greper.tools).toEqual({
+      basher: true,
+      editor: false,
+      greper: false,
+      reverie: false,
+      submit_review: false,
+      submit_review_result: false,
+      webfetch: false,
+      websearch: false,
+    });
     expect(cfg.agents.greper.permission).toMatchObject({
       read: 'allow',
       glob: 'allow',
-      basher: 'allow',
-      editor: 'deny',
-      greper: 'deny',
-      reverie: 'deny',
-      submit_review: 'deny',
-      submit_review_result: 'deny',
+      bash: 'deny',
+      edit: 'deny',
+      write: 'deny',
+      grep: 'deny',
+      task: 'deny',
     });
   });
 

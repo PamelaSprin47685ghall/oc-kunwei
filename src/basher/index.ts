@@ -147,7 +147,25 @@ export function getBasherConfig() {
       basher: {
         prompt: BASHER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        permission: { bash: 'allow', edit: 'deny', write: 'deny', glob: 'deny', grep: 'deny', task: 'deny', read: 'deny', basher: 'deny', editor: 'deny', greper: 'deny', reverie: 'deny', submit_review: 'deny', submit_review_result: 'deny' } as Record<string, unknown>,
+        tools: {
+          basher: false,
+          editor: false,
+          greper: false,
+          reverie: false,
+          submit_review: false,
+          submit_review_result: false,
+          webfetch: false,
+          websearch: false,
+        },
+        permission: {
+          bash: 'allow',
+          edit: 'deny',
+          write: 'deny',
+          glob: 'deny',
+          grep: 'deny',
+          task: 'deny',
+          read: 'deny',
+        } as Record<string, unknown>,
       },
     },
   };
