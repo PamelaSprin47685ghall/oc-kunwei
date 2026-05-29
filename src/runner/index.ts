@@ -42,17 +42,15 @@ The system will provide guidance when:
 Follow these prompts carefully. They exist to prevent infinite waiting on stuck tasks.`;
 
 function buildRunnerPrompt(
-  command: string | undefined,
   language: string,
-  code: string | undefined,
+  program: string,
   dependencies: string[] | undefined,
   whatToSummarize: string,
 ): string {
-  const executionCode = language === 'python' ? code : command;
-  return `Execute the following ${language} code/command and summarize the results.
+  return `Execute the following ${language} program and summarize the results.
 
-Code:
-${executionCode || '(no code provided)'}
+Program:
+${program}
 
 ${language === 'python' && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
 
@@ -70,18 +68,13 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
       'Automatically handles timeout management and provides incremental output monitoring.',
 
     args: {
-      command: tool.schema
-        .string()
-        .optional()
-        .describe('Shell command to execute (when language is "shell")'),
       language: tool.schema
         .enum(['shell', 'python'])
         .default('shell')
         .describe('Execution language'),
-      code: tool.schema
+      program: tool.schema
         .string()
-        .optional()
-        .describe('Python code to execute (when language is "python")'),
+        .describe('The program to execute. Can be a shell command or Python code depending on language'),
       dependencies: tool.schema
         .array(tool.schema.string())
         .optional()
@@ -98,9 +91,8 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
       );
 
       const prompt = buildRunnerPrompt(
-        args.command,
         args.language,
-        args.code,
+        args.program,
         args.dependencies,
         args.what_to_summarize,
       );
@@ -123,7 +115,7 @@ export function createRunnerExecuteTool(ctx: PluginInput): ToolDefinition {
       'Starts executing a command. If it completes within 5 seconds, returns full output. ' +
       'Otherwise, moves to background and returns initial output. Use wait() to check progress.',
     args: {
-      code: tool.schema.string().describe('Command or code to execute'),
+      program: tool.schema.string().describe('The program to execute. Can be a shell command or Python code depending on language'),
       language: tool.schema
         .enum(['shell', 'python'])
         .default('shell')
@@ -137,7 +129,7 @@ export function createRunnerExecuteTool(ctx: PluginInput): ToolDefinition {
       const sessionId = getSessionId(context);
       const result: ExecuteResult = await executeCommand({
         sessionId,
-        code: args.code,
+        program: args.program,
         language: args.language,
         dependencies: args.dependencies,
       });

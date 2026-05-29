@@ -73,7 +73,7 @@ export function cleanupJob(sessionId: string): void {
 }
 
 function createTempScript(
-  code: string,
+  program: string,
   language: 'shell' | 'python',
 ): { path: string; interpreter: string; args: string[] } {
   const dir = join(tmpdir(), 'opencode-runner');
@@ -81,7 +81,7 @@ function createTempScript(
 
   if (language === 'python') {
     const scriptPath = join(dir, `script-${randomUUID()}.py`);
-    writeFileSync(scriptPath, code, 'utf-8');
+    writeFileSync(scriptPath, program, 'utf-8');
     return {
       path: scriptPath,
       interpreter: 'python3',
@@ -91,7 +91,7 @@ function createTempScript(
 
   const ext = process.platform === 'win32' ? 'ps1' : 'sh';
   const scriptPath = join(dir, `script-${randomUUID()}.${ext}`);
-  writeFileSync(scriptPath, code, 'utf-8');
+  writeFileSync(scriptPath, program, 'utf-8');
 
   if (process.platform === 'win32') {
     return {
@@ -111,7 +111,7 @@ function createTempScript(
 
 export interface ExecuteOptions {
   sessionId: string;
-  code: string;
+  program: string;
   language: 'shell' | 'python';
   dependencies?: string[];
   earlyTimeoutMs?: number;
@@ -127,7 +127,7 @@ export interface ExecuteResult {
 export async function execute(
   options: ExecuteOptions,
 ): Promise<ExecuteResult> {
-  const { sessionId, code, language, dependencies, earlyTimeoutMs } = options;
+  const { sessionId, program, language, dependencies, earlyTimeoutMs } = options;
   const timeoutMs = earlyTimeoutMs ?? 5000;
 
   const existingJob = activeJobs.get(sessionId);
@@ -161,12 +161,12 @@ export async function execute(
       'opencode-runner',
       `script-${randomUUID()}.py`,
     );
-    writeFileSync(scriptPath, code, 'utf-8');
+    writeFileSync(scriptPath, program, 'utf-8');
     tempScriptPath = scriptPath;
     args = [...uvArgs, scriptPath];
     commandToRun = 'uv';
   } else {
-    const { path, interpreter } = createTempScript(code, 'shell');
+    const { path, interpreter } = createTempScript(program, 'shell');
     commandToRun = interpreter;
     args = [path];
   }

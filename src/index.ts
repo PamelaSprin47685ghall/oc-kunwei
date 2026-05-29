@@ -28,6 +28,7 @@ const { agents: editorAgents } = getEditorConfig();
 const { agents: runnerAgents } = getRunnerConfig();
 const { agents: reverieAgents } = getReverieConfig();
 const { agents: reviewerAgents } = getReviewerConfig();
+const { agents: greperAgents } = getGreperConfig();
 
 const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
   orchestrator: {
@@ -82,12 +83,14 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     runner_execute: true,
     runner_wait: true,
     runner_abort: true,
+    runner: false,
     editor: false,
     greper: false,
     reverie: false,
     submit_review: false,
     submit_review_result: false,
     webfetch: false,
+    websearch: false,
     read: false,
     write: false,
     edit: false,
@@ -172,6 +175,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
         ...runnerAgents,
         ...reverieAgents,
         ...reviewerAgents,
+        ...greperAgents,
         orchestrator: {
           ...(opencodeConfig.agent?.orchestrator as
             | Record<string, unknown>

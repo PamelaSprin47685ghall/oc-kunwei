@@ -28,7 +28,7 @@ describe('Runner Tools', () => {
     it('should execute fast shell command and return synchronously', async () => {
       const result: ExecuteResult = await execute({
         sessionId: 'test-fast-shell',
-        code: 'echo "hello"',
+        program: 'echo "hello"',
         language: 'shell',
       });
 
@@ -39,7 +39,7 @@ describe('Runner Tools', () => {
     it('should execute fast Python code and return synchronously', async () => {
       const result: ExecuteResult = await execute({
         sessionId: 'test-fast-python',
-        code: 'print("hello from python")',
+        program: 'print("hello from python")',
         language: 'python',
       });
 
@@ -50,7 +50,7 @@ describe('Runner Tools', () => {
     it('should background slow commands', async () => {
       const result: ExecuteResult = await execute({
         sessionId: 'test-slow',
-        code: 'sleep 10',
+        program: 'sleep 10',
         language: 'shell',
         earlyTimeoutMs: 50,
       });
@@ -62,7 +62,7 @@ describe('Runner Tools', () => {
     it('should block duplicate execution', async () => {
       await execute({
         sessionId: 'test-duplicate',
-        code: 'sleep 10',
+        program: 'sleep 10',
         language: 'shell',
         earlyTimeoutMs: 50,
       });
@@ -70,7 +70,7 @@ describe('Runner Tools', () => {
       try {
         await execute({
           sessionId: 'test-duplicate',
-          code: 'echo "should fail"',
+          program: 'echo "should fail"',
           language: 'shell',
           earlyTimeoutMs: 50,
         });
@@ -94,7 +94,7 @@ describe('Runner Tools', () => {
     it('should wait and return output for background task', async () => {
       const execResult = await execute({
         sessionId: 'test-wait',
-        code: 'sleep 10',
+        program: 'sleep 10',
         language: 'shell',
         earlyTimeoutMs: 50,
       });
@@ -112,7 +112,7 @@ describe('Runner Tools', () => {
     it('should detect completed task', async () => {
       const execResult = await execute({
         sessionId: 'test-complete',
-        code: 'echo "finished"',
+        program: 'echo "finished"',
         language: 'shell',
         earlyTimeoutMs: 50,
       });
@@ -133,7 +133,7 @@ describe('Runner Tools', () => {
     it('should abort running task', async () => {
       await execute({
         sessionId: 'test-abort',
-        code: 'sleep 100',
+        program: 'sleep 100',
         language: 'shell',
         earlyTimeoutMs: 50,
       });
@@ -153,7 +153,7 @@ describe('Runner Tools', () => {
     it('should clean up active job', async () => {
       await execute({
         sessionId: 'test-cleanup',
-        code: 'sleep 100',
+        program: 'sleep 100',
         language: 'shell',
         earlyTimeoutMs: 50,
       });
