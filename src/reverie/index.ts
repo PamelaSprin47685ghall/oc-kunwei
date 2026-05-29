@@ -16,15 +16,15 @@ export function createReverieTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Receive a natural-language intent or question for deep reasoning and delegate to the reverie agent.',
+      "Receive a natural-language intent or question for deep reasoning and delegate to the reverie agent. IMPORTANT: Do NOT assume the reverie agent knows the project background, design documents, or any specific domain knowledge. You must provide all necessary context explicitly in your intent and files. Failure to do so will cause severe confusion.",
 
     args: {
       intent: tool.schema
         .string()
-        .describe('A natural-language intent or question to contemplate.'),
+        .describe('A natural-language intent or question to contemplate. Must include all relevant background, design rationale, and specific requirements. Do not assume the agent knows anything about the project context.'),
       files: tool.schema
         .array(tool.schema.string())
-        .describe('File paths to provide as context for the contemplation.'),
+        .describe('File paths to provide as context for the contemplation. Include any design docs, relevant code, or background material the agent needs to understand the question.'),
     },
 
     async execute(args, context) {

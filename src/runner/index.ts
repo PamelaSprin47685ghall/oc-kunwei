@@ -1,53 +1,40 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
-import { extractToolContext, runSubagent } from '../utils/session';
+import {
+  isAbortError,
+  extractSessionText,
+  promptWithAbort,
+  extractToolContext,
+} from '../utils/session';
 import {
   execute as executeCommand,
-  wait as waitForOutput,
-  abort as abortCommand,
-  getSessionId,
+  cleanupJob,
   type ExecuteResult,
-  type WaitResult,
 } from './tools.js';
 
-const RUNNER_SYSTEM_PROMPT = `You are a command execution specialist. Your job is to:
-1. Execute commands using the provided tools
-2. Monitor their progress
-3. Provide concise summaries of results
+const RUNNER_SYSTEM_PROMPT = `You are a command output summarizer. The command has already been started by the system automatically. You only have two tools: runner_wait and runner_abort.
 
-You have three tools:
-- execute: Start a command (auto-redirects to background after 5s)
-- wait: Wait for output from a running command
-- abort: Forcefully terminate a running command
-
-## Workflow
-1. Call execute with your command
-2. If it runs quickly (≤5s), you'll get full output immediately
-3. If it runs longer, you'll get initial output and it moves to background
-4. Use wait() to poll for more output
-5. When done, summarize the results
-
-## Critical Rules
-- NEVER attempt to run commands directly with bash - only use the execute tool
-- NEVER return a summary while a task is still running (the system will block you)
-- If a task seems stuck, use abort() and try a different approach
-- Keep summaries concise and focused on what was requested
-
-## Nudge System
-The system will provide guidance when:
-- A task moves to background (告诉你如何决策)
-- No new output appears during wait (警告可能卡死)
-- You try to return while task is running (拦截并要求终止)
-
-Follow these prompts carefully. They exist to prevent infinite waiting on stuck tasks.`;
+## Rules
+- For quick tasks (when you see "Task completed"), directly summarize the complete output
+- For long-running tasks (when you see "任务已转入后台"), you must use runner_wait to poll for updates, or runner_abort to stop the task
+- Summarize the command output clearly and concisely
+- Focus on what was requested in "What to summarize"
+- Include any errors, warnings, or failures explicitly
+- Do not fabricate information not present in the output
+- Keep the summary focused and relevant
+- If the output is empty or contains only system messages, state that clearly`;
 
 function buildRunnerPrompt(
   language: string,
   program: string,
   dependencies: string[] | undefined,
   whatToSummarize: string,
+  executeResult: ExecuteResult,
 ): string {
-  return `Execute the following ${language} program and summarize the results.
+  if (!executeResult.background) {
+    return `The following ${language} program has been executed.
+
+Task completed.
 
 Program:
 ${program}
@@ -55,7 +42,28 @@ ${program}
 ${language === 'python' && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
 
 What to summarize:
-${whatToSummarize}`;
+${whatToSummarize}
+
+Execution output:
+${executeResult.output}${executeResult.message ? '\n\n' + executeResult.message : ''}`;
+  }
+
+  return `The following ${language} program is running in background.
+
+任务已转入后台。
+
+Program:
+${program}
+
+${language === 'python' && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
+
+What to summarize:
+${whatToSummarize}
+
+Initial output (first 5 seconds):
+${executeResult.output}${executeResult.message ? '\n\n' + executeResult.message : ''}
+
+You must use runner_wait to poll for more output, or runner_abort to stop the task.`;
 }
 
 export function createRunnerTool(ctx: PluginInput): ToolDefinition {
@@ -90,107 +98,58 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
         ctx.directory,
       );
 
-      const prompt = buildRunnerPrompt(
-        args.language,
-        args.program,
-        args.dependencies,
-        args.what_to_summarize,
-      );
-
-      return runSubagent(client, {
-        agent: 'runner',
-        title: 'Runner',
-        parts: [{ type: 'text', text: prompt }],
-        directory,
-        sessionID,
-        abortSignal,
+      const createResult = await client.session.create({
+        query: { directory },
+        body: {
+          parentID: sessionID,
+          title: 'Runner',
+        },
       });
-    },
-  });
-}
+      const childID = createResult.data?.id;
+      if (!childID) return 'Failed to create child session';
 
-export function createRunnerExecuteTool(ctx: PluginInput): ToolDefinition {
-  return tool({
-    description:
-      'Starts executing a command. If it completes within 5 seconds, returns full output. ' +
-      'Otherwise, moves to background and returns initial output. Use wait() to check progress.',
-    args: {
-      program: tool.schema.string().describe('The program to execute. Can be a shell command or Python code depending on language'),
-      language: tool.schema
-        .enum(['shell', 'python'])
-        .default('shell')
-        .describe('Execution language'),
-      dependencies: tool.schema
-        .array(tool.schema.string())
-        .optional()
-        .describe('Python dependencies (only for python language)'),
-    },
-    async execute(args, context) {
-      const sessionId = getSessionId(context);
-      const result: ExecuteResult = await executeCommand({
-        sessionId,
-        program: args.program,
-        language: args.language,
-        dependencies: args.dependencies,
-      });
+      try {
+        const execResult: ExecuteResult = await executeCommand({
+          sessionId: childID,
+          program: args.program,
+          language: args.language,
+          dependencies: args.dependencies,
+        });
 
-      let output = result.output;
-      if (result.message) {
-        output += '\n\n' + result.message;
+        const prompt = buildRunnerPrompt(
+          args.language,
+          args.program,
+          args.dependencies,
+          args.what_to_summarize,
+          execResult,
+        );
+
+        await promptWithAbort(
+          client,
+          {
+            path: { id: childID },
+            body: {
+              agent: 'runner',
+              parts: [{ type: 'text', text: prompt }],
+            },
+          },
+          abortSignal,
+        );
+
+        const summary = await extractSessionText(client, childID, directory);
+        return summary || '(no output)';
+      } catch (err) {
+        if (isAbortError(err)) {
+          try {
+            client.session.abort({ path: { id: childID } });
+          } catch (_) {}
+          cleanupJob(childID);
+          const text = await extractSessionText(client, childID, directory);
+          return text ? `(aborted) ${text}` : '(aborted)';
+        }
+        cleanupJob(childID);
+        throw err;
       }
-
-      return {
-        title: result.background ? 'Running in Background' : 'Execution Complete',
-        output,
-      };
-    },
-  });
-}
-
-export function createRunnerWaitTool(ctx: PluginInput): ToolDefinition {
-  return tool({
-    description:
-      'Waits for output from a background task. Returns any new output since last call. ' +
-      'Max wait time is 30 seconds.',
-    args: {
-      ms: tool.schema
-        .number()
-        .min(100)
-        .max(30000)
-        .default(5000)
-        .describe('Milliseconds to wait (max 30000)'),
-    },
-    async execute(args, context) {
-      const sessionId = getSessionId(context);
-      const result: WaitResult = await waitForOutput({
-        sessionId,
-        ms: args.ms,
-      });
-
-      let output = result.output || '(no new output)';
-      if (result.message) {
-        output += '\n\n' + result.message;
-      }
-
-      return {
-        title: result.completed ? 'Task Completed' : 'Still Running',
-        output,
-      };
-    },
-  });
-}
-
-export function createRunnerAbortTool(ctx: PluginInput): ToolDefinition {
-  return tool({
-    description: 'Forcefully terminates the current background task.',
-    args: {},
-    async execute(_args, context) {
-      const sessionId = getSessionId(context);
-      const result = abortCommand(sessionId);
-      return {
-        title: 'Task Terminated',
-        output: result,
-      };
     },
   });
 }
@@ -208,7 +167,6 @@ export function getRunnerConfig() {
           grep: 'deny',
           task: 'deny',
           read: 'deny',
-          runner_execute: 'allow',
           runner_wait: 'allow',
           runner_abort: 'allow',
         } as Record<string, unknown>,

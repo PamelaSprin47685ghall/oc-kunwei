@@ -12,12 +12,12 @@ export function createEditorTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Receive a natural-language intent for code changes and delegate to the editor agent.',
+      'Receive a natural-language intent for code changes and delegate to the editor agent. IMPORTANT: Do NOT assume the editor agent knows the project background, design documents, or any specific domain knowledge. You must provide all necessary context explicitly in your intent. Failure to do so will cause severe confusion.',
 
     args: {
       intent: tool.schema
         .string()
-        .describe('A natural-language intent describing the desired code changes.'),
+        .describe('A natural-language intent describing the desired code changes. Must include all relevant background, design rationale, file paths, and specific requirements. Do not assume the agent knows anything about the project context.'),
     },
 
     async execute(args, context) {

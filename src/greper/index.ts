@@ -13,12 +13,12 @@ export function createGreperTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Receive a natural-language intent for code search and delegate to the search agent.',
+      "Receive a natural-language intent for code search and delegate to the search agent. IMPORTANT: Do NOT assume the search agent knows the project background, design documents, or any specific domain knowledge. You must provide all necessary context explicitly in your intent. Failure to do so will cause severe confusion.",
 
     args: {
       intent: tool.schema
         .string()
-        .describe('A natural-language intent describing the code to find.'),
+        .describe('A natural-language intent describing the code to find. Must include all relevant background, design rationale, and specific requirements. Do not assume the agent knows anything about the project context.'),
     },
 
     async execute(args, context) {
