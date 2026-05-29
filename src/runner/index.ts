@@ -71,9 +71,10 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Executes a shell command or Python code and returns a natural-language summary. ' +
-      'Supports both quick synchronous execution and long-running background tasks. ' +
-      'Automatically handles timeout management and provides incremental output monitoring.',
+       'Executes a shell command or Python code and returns a natural-language summary. ' +
+       'Supports both quick synchronous execution and long-running background tasks. ' +
+       'Automatically handles timeout management and provides incremental output monitoring. ' +
+       'IMPORTANT: If executing Python code (language="python"), you must specify all necessary third-party package dependencies (e.g. numpy, pandas, requests) in the "dependencies" argument so they can be installed and resolved before execution.',
 
     args: {
       language: tool.schema
@@ -83,10 +84,10 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
       program: tool.schema
         .string()
         .describe('The program to execute. Can be a shell command or Python code depending on language'),
-      dependencies: tool.schema
-        .array(tool.schema.string())
-        .optional()
-        .describe('Python dependencies to install (only for python language)'),
+        dependencies: tool.schema
+          .array(tool.schema.string())
+          .optional()
+          .describe('Python dependencies to install (only for python language). For Python programs, you must explicitly specify all third-party libraries used in the code to ensure they are available.'),
       what_to_summarize: tool.schema
         .string()
         .describe('What to look for in the output. Be specific.'),
