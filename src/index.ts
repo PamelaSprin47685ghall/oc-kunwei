@@ -24,6 +24,7 @@ import {
 } from './runner/index.js';
 import { createRunnerNudgeHook } from './runner/nudge.js';
 import { createReverieTool, getReverieConfig } from './reverie/index.js';
+import { getMcpConfig } from './mcp/index.js';
 
 const { agents: editorAgents } = getEditorConfig();
 const { agents: runnerAgents } = getRunnerConfig();
@@ -117,6 +118,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
 };
 
 const KunweiPlugin: Plugin = async (ctx) => {
+  const mcps = getMcpConfig();
   const capitalsContextHook = createCapitalsContextHook(ctx.directory);
   const nudgeTodoHook = createNudgeTodoHook(ctx);
   const loopCommandManager = createLoopCommandManager(ctx);
@@ -125,6 +127,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
 
   return {
     name: 'kunwei',
+    mcp: mcps,
 
     tool: {
       editor: createEditorTool(ctx),
@@ -210,6 +213,13 @@ const KunweiPlugin: Plugin = async (ctx) => {
           Object.assign(runnerEntry, userAgent.basher);
         }
         delete (opencodeConfig.agent as Record<string, unknown>).basher;
+      }
+
+      const configMcp = opencodeConfig.mcp as Record<string, unknown> | undefined;
+      if (!configMcp) {
+        opencodeConfig.mcp = { ...mcps };
+      } else {
+        Object.assign(configMcp, mcps);
       }
 
       loopCommandManager.registerCommand(opencodeConfig);
