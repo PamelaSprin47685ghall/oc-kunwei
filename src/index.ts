@@ -44,6 +44,7 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     glob: false,
     grep: false,
     task: false,
+    bash: false,
   },
   editor: {
     read: true,
@@ -191,6 +192,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
             glob: 'deny',
             grep: 'deny',
             task: 'deny',
+            bash: 'deny',
           },
         } as Record<string, unknown>,
       };
