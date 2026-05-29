@@ -31,6 +31,7 @@ const { agents: reviewerAgents } = getReviewerConfig();
 
 const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
   orchestrator: {
+    read: true,
     editor: true,
     greper: true,
     reverie: true,
@@ -44,7 +45,6 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     glob: false,
     grep: false,
     task: false,
-    bash: false,
   },
   editor: {
     read: true,
@@ -233,6 +233,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
         const agent = entry as Record<string, unknown>;
         const perm = ((agent.permission as Record<string, unknown>) ??
           {}) as Record<string, unknown>;
+        perm.bash = 'deny';
         if (name === 'greper' || name === 'reviewer' || name === 'runner') {
           if (!('semble_*' in perm)) perm['semble_*'] = 'allow';
         } else {
@@ -252,7 +253,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
     'tool.execute.before': async (
       input: { tool: string; callID: string },
       output: { args?: Record<string, unknown> },
-    ): Promise<void> => {},
+    ): Promise<void> => { },
 
     'tool.execute.after': async (
       input: { tool: string; callID: string },
@@ -261,7 +262,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
         title?: string;
         metadata?: Record<string, unknown>;
       },
-    ): Promise<void> => {},
+    ): Promise<void> => { },
 
     'command.execute.before': async (
       input: {
