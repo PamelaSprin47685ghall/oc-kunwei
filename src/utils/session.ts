@@ -150,6 +150,9 @@ export async function runSubagent(
     );
   } catch (err) {
     if (isAbortError(err)) {
+      try {
+        client.session.abort({ path: { id: childID } });
+      } catch (_) {}
       const text = await extractSessionText(client, childID, params.directory);
       return text ? `(aborted) ${text}` : '(aborted)';
     }

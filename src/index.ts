@@ -130,7 +130,16 @@ const CapsPlugin: Plugin = async (ctx) => {
       if (!args || typeof args.command !== 'string') return;
       const { script } = stripHeadTailPipes(args.command);
       args.command = script;
-      args.timeout = 5000;
+
+      const timeout = args.timeout;
+      if (typeof timeout === 'number' && timeout > 10000) {
+        throw new Error(
+          'Timeout too large. Set a shorter timeout (<= 10000ms or 10s) or run the command using tmux.',
+        );
+      }
+      if (typeof timeout !== 'number') {
+        args.timeout = 10000;
+      }
     },
 
     'tool.execute.after': async (

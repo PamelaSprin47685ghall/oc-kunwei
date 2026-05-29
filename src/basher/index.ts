@@ -1,5 +1,3 @@
-
-
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import { extractToolContext, runSubagent } from '../utils/session';
@@ -41,7 +39,51 @@ When describing command output:
 - Focus on the information the user requested
 - Be concise but thorough
 - If the output is very long, summarize the key points rather than reproducing everything
-- Don't include any follow up recommendations, suggestions, or offers to help`;
+- Don't include any follow up recommendations, suggestions, or offers to help
+
+## Execution Strategy
+
+### Time Estimation
+Before running a command, estimate its execution time:
+- Fast (<10s): simple queries, file reads, quick computations
+- Slow (≥10s): git clone/pull/push, npm install, build pipelines, test suites, long computations
+
+### Fast Commands
+Run directly and return output inline.
+
+### Slow Commands (tmux Async Execution)
+Run asynchronously via tmux using the load-buffer / paste-buffer / delete-buffer pattern with a random-bounded heredoc. This avoids escaping/quoting issues and temp file cleanup.
+
+**Step 1 — New session and load the command into tmux buffer:**
+\`\`\`bash
+tmux new-session -d -s "build-packages" -c "/home/user/project"
+tmux load-buffer -b "build-packages" <<'EOF_BUILD_PACKAGES'
+npm install
+EOF_BUILD_PACKAGES
+\`\`\`
+
+**Step 2 — Execute via paste-buffer, then clean up the buffer:**
+\`\`\`bash
+tmux paste-buffer -p -t "build-packages" -b "build-packages"
+tmux delete-buffer -b "build-packages"
+\`\`\`
+
+**View logs:**
+\`\`\`bash
+tmux capture-pane -p -t "build-packages"
+\`\`\`
+
+### Session and Heredoc Naming Requirements
+
+You **MUST** choose descriptive, meaningful, and unique names for both the session name and the heredoc boundary identifier. This ensures session isolation and prevents execution conflicts.
+
+**Session name:** Use a name related to the task (e.g., \`build-npm-install\`, \`test-suite-run\`, \`git-clone-repo\`, \`compile-typescript\`). Avoid generic names like \`session\` or \`temp\`.
+
+**Heredoc boundary identifier:** Use a descriptive identifier related to the task (e.g., \`EOF_BUILD_17\`, \`EOF_TEST_SUITE\`, \`EOF_COMPILE_STEP\`, \`EOF_INSTALL_DEPS\`). Avoid generic placeholders like \`EOF\` or random strings that don't convey purpose.
+
+### Output Summary
+- For sync tasks: provide a clear summary of the output
+- For async tasks: report the tmux session name and log path, then later read the log file and summarize the final output`;
 
 function buildPrompt(command: string, what: string): string {
   return `Command:
@@ -58,8 +100,8 @@ export function createBasherTool(ctx: PluginInput): ToolDefinition {
     description:
       'Executes a bash command and returns a natural-language summary. ' +
       'MUST provide "command" and "what_to_summarize". ' +
-      'The bash command has a 5-second timeout. ' +
-      'For longer-running commands like git clone, compile, or test, use tmux to run them asynchronously.',
+      'Supports quick sync commands (fast, returns output inline) and long-running async background execution via tmux. ' +
+      'The Orchestrator can request running via tmux for slow commands (git clone/pull/push, npm install, build, test, etc.) and will report the session name and log path for later log retrieval.',
 
     args: {
       command: tool.schema.string().describe('The bash command to execute'),
