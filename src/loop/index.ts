@@ -584,7 +584,7 @@ export function getReviewerConfig() {
       reviewer: {
         prompt: 'You are a code reviewer...',
         mode: 'subagent' as const,
-        tools: { basher: true, explorer: true, reverie: true },
+        tools: { basher: true, greper: true, reverie: true },
         permission: {
           read: 'allow',
           bash: 'deny',
@@ -595,7 +595,7 @@ export function getReviewerConfig() {
           glob: 'deny',
           grep: 'deny',
           task: 'deny',
-          explorer: 'allow',
+          greper: 'allow',
           editor: 'deny',
           reverie: 'allow',
           submit_review: 'deny',

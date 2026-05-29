@@ -2,20 +2,20 @@ import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import { extractToolContext, runSubagent } from '../utils/session';
 
-const EXPLORER_SYSTEM_PROMPT =
+const GREPER_SYSTEM_PROMPT =
   'You are a code exploration agent. Given a search query, use semble_search to find relevant code in the workspace. ' +
   'Read the relevant files and provide a detailed summary of what you found, including file paths and key code sections. ' +
   'You have access to basher for read-only exploration commands (e.g., listing files, checking git status). ' +
   'Do NOT use basher to modify files — if you need to make changes, stop and report back.';
 
-export function createExplorerTool(ctx: PluginInput): ToolDefinition {
+export function createGreperTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;
 
   return tool({
     description:
       'Search the codebase using semantic search. ' +
       'Provide a natural-language query describing what code you are looking for. ' +
-      'The explorer agent uses semble for semantic code search and can read files to provide detailed context.',
+      'The greper agent uses semble for semantic code search and can read files to provide detailed context.',
 
     args: {
       query: tool.schema
@@ -30,8 +30,8 @@ export function createExplorerTool(ctx: PluginInput): ToolDefinition {
       );
 
       return runSubagent(client, {
-        agent: 'explorer',
-        title: 'Explorer',
+        agent: 'greper',
+        title: 'Greper',
         parts: [{ type: 'text', text: args.query }],
         directory,
         sessionID,
@@ -41,14 +41,14 @@ export function createExplorerTool(ctx: PluginInput): ToolDefinition {
   });
 }
 
-export function getExplorerConfig() {
+export function getGreperConfig() {
   return {
     agents: {
-      explorer: {
-        prompt: EXPLORER_SYSTEM_PROMPT,
+      greper: {
+        prompt: GREPER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         tools: { basher: true },
-        permission: { read: 'allow', basher: 'allow', bash: 'deny', edit: 'deny', write: 'deny', glob: 'allow', grep: 'deny', task: 'deny', editor: 'deny', explorer: 'deny', reverie: 'deny', submit_review: 'deny', submit_review_result: 'deny' } as Record<string, unknown>,
+        permission: { read: 'allow', basher: 'allow', bash: 'deny', edit: 'deny', write: 'deny', glob: 'allow', grep: 'deny', task: 'deny', editor: 'deny', greper: 'deny', reverie: 'deny', submit_review: 'deny', submit_review_result: 'deny' } as Record<string, unknown>,
         mcps: ['semble'],
       },
     },

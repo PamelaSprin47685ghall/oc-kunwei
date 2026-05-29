@@ -273,14 +273,14 @@ describe('createSubmitReviewTool', () => {
   test('reviewer config has basher tool, read/bash permission, and semble MCP', () => {
     const config = getReviewerConfig();
     expect(config.agents?.reviewer?.tools?.basher).toBe(true);
-    expect(config.agents?.reviewer?.tools?.explorer).toBe(true);
+    expect(config.agents?.reviewer?.tools?.greper).toBe(true);
     expect(config.agents?.reviewer?.tools?.reverie).toBe(true);
     expect(config.agents?.reviewer?.permission).toMatchObject({
       read: 'allow',
       bash: 'deny',
       basher: 'allow',
       submit_review_result: 'allow',
-      explorer: 'allow',
+      greper: 'allow',
       reverie: 'allow',
     });
     expect(config.agents?.reviewer?.mcps).toContain('semble');

@@ -16,7 +16,7 @@ describe('getReverieConfig', () => {
       write: 'deny',
       basher: 'deny',
       editor: 'deny',
-      explorer: 'deny',
+      greper: 'deny',
       reverie: 'deny',
       submit_review: 'deny',
       submit_review_result: 'deny',

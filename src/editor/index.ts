@@ -51,7 +51,7 @@ export function getEditorConfig() {
       editor: {
         prompt: EDITOR_SYSTEM_PROMPT,
         mode: 'subagent' as const,
-        tools: { basher: true, explorer: true },
+        tools: { basher: true, greper: true },
         permission: {
           read: 'allow',
           write: 'allow',
@@ -60,7 +60,7 @@ export function getEditorConfig() {
           glob: 'deny',
           grep: 'deny',
           task: 'deny',
-          explorer: 'allow',
+          greper: 'allow',
           reverie: 'deny',
           submit_review: 'deny',
           submit_review_result: 'deny',

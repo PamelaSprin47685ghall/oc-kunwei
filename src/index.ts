@@ -5,7 +5,7 @@ import {
   stripHeadTailPipes,
 } from './basher/index.js';
 import { createEditorTool, getEditorConfig } from './editor/index.js';
-import { createExplorerTool, getExplorerConfig } from './explorer/index.js';
+import { createGreperTool, getGreperConfig } from './greper/index.js';
 import { createCapitalsContextHook } from './inject-caps/index.js';
 import {
   createLoopCommandManager,
@@ -23,7 +23,7 @@ import { createReverieTool, getReverieConfig } from './reverie/index.js';
 
 const { agents: basherAgents } = getBasherConfig();
 const { agents: editorAgents } = getEditorConfig();
-const { agents: explorerAgents } = getExplorerConfig();
+const { agents: greperAgents } = getGreperConfig();
 const { agents: reverieAgents } = getReverieConfig();
 const { agents: reviewerAgents } = getReviewerConfig();
 
@@ -39,7 +39,7 @@ const CapsPlugin: Plugin = async (ctx) => {
     tool: {
       basher: createBasherTool(ctx),
       editor: createEditorTool(ctx),
-      explorer: createExplorerTool(ctx),
+      greper: createGreperTool(ctx),
       reverie: createReverieTool(ctx),
       submit_review: createSubmitReviewTool(ctx),
       submit_review_result: createSubmitReviewResultTool(),
@@ -53,7 +53,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         ...userAgent,
         ...basherAgents,
         ...editorAgents,
-        ...explorerAgents,
+        ...greperAgents,
         ...reverieAgents,
         ...reviewerAgents,
         orchestrator: {
@@ -81,7 +81,7 @@ const CapsPlugin: Plugin = async (ctx) => {
       for (const name of [
         'basher',
         'editor',
-        'explorer',
+        'greper',
         'reverie',
         'reviewer',
       ]) {
@@ -105,7 +105,7 @@ const CapsPlugin: Plugin = async (ctx) => {
         const agent = entry as Record<string, unknown>;
         const perm = ((agent.permission as Record<string, unknown>) ??
           {}) as Record<string, unknown>;
-        if (name === 'explorer' || name === 'reviewer') {
+        if (name === 'greper' || name === 'reviewer') {
           if (!('semble_*' in perm)) perm['semble_*'] = 'allow';
         } else {
           if (!('semble_*' in perm)) perm['semble_*'] = 'deny';
