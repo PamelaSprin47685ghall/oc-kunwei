@@ -44,9 +44,9 @@ export function getBrowserConfig() {
       browser: {
         prompt: BROWSER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
+        mcps: ['stealth-browser-mcp'],
         permission: {
           read: 'allow',
-          'stealth_browser_mcp_*': 'allow',
           bash: 'deny',
           write: 'deny',
           edit: 'deny',

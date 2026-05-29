@@ -162,6 +162,7 @@ export function getRunnerConfig() {
       runner: {
         prompt: RUNNER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
+        mcps: [],
         permission: {
           edit: 'deny',
           write: 'deny',

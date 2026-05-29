@@ -584,6 +584,7 @@ export function getReviewerConfig() {
       reviewer: {
         prompt: 'You are a code reviewer...',
         mode: 'subagent' as const,
+        mcps: [],
         permission: {
           read: 'allow',
           bash: 'deny',

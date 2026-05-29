@@ -75,6 +75,7 @@ export function getReverieConfig() {
         prompt: REVERIE_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         permission: { bash: 'deny', edit: 'deny', write: 'deny', glob: 'deny', grep: 'deny', task: 'deny', read: 'deny' } as Record<string, unknown>,
+        mcps: [],
       },
     },
   };

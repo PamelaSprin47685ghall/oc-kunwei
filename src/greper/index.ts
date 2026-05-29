@@ -48,6 +48,7 @@ export function getGreperConfig() {
       greper: {
         prompt: GREPER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
+        mcps: [],
         permission: { read: 'allow', glob: 'allow', bash: 'deny', edit: 'deny', write: 'deny', grep: 'allow', task: 'deny' } as Record<string, unknown>,
       },
     },

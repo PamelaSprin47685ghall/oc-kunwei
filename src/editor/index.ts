@@ -44,6 +44,7 @@ export function getEditorConfig() {
       editor: {
         prompt: EDITOR_SYSTEM_PROMPT,
         mode: 'subagent' as const,
+        mcps: [],
         permission: {
           read: 'allow',
           write: 'allow',
