@@ -132,13 +132,13 @@ const CapsPlugin: Plugin = async (ctx) => {
       args.command = script;
 
       const timeout = args.timeout;
-      if (typeof timeout === 'number' && timeout > 10000) {
+      if (typeof timeout !== 'number') {
+        throw new Error('Timeout must be explicitly set (no fallback).');
+      }
+      if (timeout > 10000) {
         throw new Error(
           'Timeout too large. Set a shorter timeout (<= 10000ms or 10s) or run the command using tmux.',
         );
-      }
-      if (typeof timeout !== 'number') {
-        args.timeout = 10000;
       }
     },
 
