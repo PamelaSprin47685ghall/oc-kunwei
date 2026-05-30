@@ -100,7 +100,7 @@ export async function checkSyntax(
     return { ok: false, reason: `failed to load native language pack: ${err}` };
   }
 
-  const lang = lp.detectLanguageFromPath(filePath);
+  const lang = lp.detectLanguage(filePath);
   if (!lang) return { ok: false, reason: `unsupported language: ${filePath}` };
 
   try {

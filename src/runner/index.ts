@@ -119,6 +119,7 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
           program: args.program,
           language,
           dependencies: args.dependencies,
+          cwd: directory,
         });
 
         const prompt = buildRunnerPrompt(

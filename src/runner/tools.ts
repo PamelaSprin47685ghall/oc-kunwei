@@ -116,6 +116,7 @@ export interface ExecuteOptions {
   language: 'shell' | 'python';
   dependencies?: string[];
   earlyTimeoutMs?: number;
+  cwd?: string;
 }
 
 export interface ExecuteResult {
@@ -178,7 +179,7 @@ export async function execute(
   try {
     childProcess = spawn(commandToRun, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: process.cwd(),
+      cwd: options.cwd ?? process.cwd(),
       env: { ...process.env },
       detached: process.platform !== 'win32',
       windowsHide: true,
