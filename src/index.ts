@@ -11,7 +11,6 @@ import {
 } from './loop/index.js';
 import { createNudgeTodoHook } from './nudge-todo/index.js';
 import {
-  createFuzzyGlobTool,
   createFuzzyGrepTool,
 } from './fuzzy/index.js';
 import {
@@ -63,6 +62,8 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     write: true,
     edit: true,
     runner: true,
+    glob: true,
+    grep: true,
     editor: false,
     greper: false,
     reverie: false,
@@ -71,8 +72,6 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     webfetch: false,
     websearch: false,
     browser: false,
-    glob: false,
-    grep: false,
     task: false,
     runner_wait: false,
     runner_abort: false,
@@ -203,7 +202,6 @@ const KunweiPlugin: Plugin = async (ctx) => {
       websearch: createOllamaWebSearchTool(),
       runner: createRunnerTool(ctx),
       browser: createBrowserTool(ctx),
-      glob: createFuzzyGlobTool(),
       grep: createFuzzyGrepTool(),
       runner_wait: createRunnerWaitTool(),
       runner_abort: createRunnerAbortTool(),

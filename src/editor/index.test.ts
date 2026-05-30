@@ -11,8 +11,8 @@ describe('getEditorConfig', () => {
       write: 'allow',
       edit: 'allow',
       bash: 'deny',
-      glob: 'deny',
-      grep: 'deny',
+      glob: 'allow',
+      grep: 'allow',
       task: 'deny',
     });
   });
