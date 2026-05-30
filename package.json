@@ -1,5 +1,5 @@
 {
-  "name": "kunwei",
+  "name": "oc-kunwei",
   "version": "0.1.0",
   "description": "OpenCode plugin: basher, editor, explorer, reverie, nudge-todo, ollama-web, refer-caps, loop",
   "type": "module",
@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node --format esm --external env",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm --external env --external @kreuzberg/tree-sitter-language-pack-wasm",
     "typecheck": "tsc --noEmit",
     "test": "bun test src/",
     "lint": "bun x biome lint src/",
