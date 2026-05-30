@@ -1,49 +1,5 @@
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-
-const localRequire = createRequire(
-  typeof __filename !== 'undefined' ? __filename : '',
-);
-
-/**
- * Lazy-loaded language pack — the NAPI native module may not be available
- * in all environments (e.g., bun test on musl-incompatible hosts), so we
- * defer loading until first syntax check call.
- */
-let languagePack: typeof import('@kreuzberg/tree-sitter-language-pack') | null =
-  null;
-
-async function getLanguagePack(): Promise<
-  typeof import('@kreuzberg/tree-sitter-language-pack')
-> {
-  if (!languagePack) {
-    try {
-      languagePack = await import('@kreuzberg/tree-sitter-language-pack');
-    } catch (err) {
-      // Node.js v25+ doesn't populate glibcVersion in process.report, causing
-      // the language pack's isMusl() to misdetect glibc as musl on linux.
-      // Assume glibc and load the gnu binary directly.
-      if (process.platform === 'linux') {
-        const pkgDir = dirname(
-          localRequire.resolve(
-            '@kreuzberg/tree-sitter-language-pack/package.json',
-          ),
-        );
-        const childRequire = createRequire(join(pkgDir, 'package.json'));
-        try {
-          languagePack = childRequire(
-            join(pkgDir, `ts-pack-core-node.linux-${process.arch}-gnu.node`),
-          );
-          return languagePack as NonNullable<typeof languagePack>;
-        } catch {
-          /* fall through to throw */
-        }
-      }
-      throw err;
-    }
-  }
-  return languagePack;
-}
+import { extname } from 'node:path';
 
 export interface SyntaxError {
   line: number;
@@ -67,82 +23,153 @@ export interface SyntaxCheckFail {
 
 export type SyntaxCheckResult = SyntaxCheckOk | SyntaxCheckFail;
 
-const initPromises = new Map<string, Promise<void>>();
+let wasmPack: any = null;
 
-async function ensureLanguage(
-  lang: string,
-  lp: typeof import('@kreuzberg/tree-sitter-language-pack'),
-): Promise<void> {
-  if (lp.hasLanguage?.(lang)) return;
+async function ensureWasmPack() {
+  if (wasmPack) return wasmPack;
 
-  let promise = initPromises.get(lang);
-  if (!promise) {
-    promise = (async () => {
-      try {
-        lp.init({ languages: [lang] });
-      } catch {
-        // Download failure is non-fatal — caller handles silently.
+  const require = createRequire(import.meta.url);
+  const Module = require('node:module');
+  const originalRequire = Module.prototype.require;
+
+  const memoryHolder = { buffer: new ArrayBuffer(0) };
+  const getMemoryView = () => new Uint8Array(memoryHolder.buffer);
+
+  const envMock = {
+    strcmp: (str1Ptr: number, str2Ptr: number) => {
+      const mem = getMemoryView();
+      let i = 0;
+      while (true) {
+        const char1 = mem[str1Ptr + i];
+        const char2 = mem[str2Ptr + i];
+        if (char1 !== char2) return char1 - char2;
+        if (char1 === 0) return 0;
+        i++;
       }
-    })();
-    initPromises.set(lang, promise);
+    },
+    memchr: (ptr: number, character: number, num: number) => {
+      const mem = getMemoryView();
+      const target = character & 0xff;
+      for (let i = 0; i < num; i++) {
+        if (mem[ptr + i] === target) return ptr + i;
+      }
+      return 0;
+    },
+    iswlower: (wc: number) => {
+      try {
+        const char = String.fromCodePoint(wc);
+        return char === char.toLowerCase() && char !== char.toUpperCase() ? 1 : 0;
+      } catch {
+        return 0;
+      }
+    },
+    iswupper: (wc: number) => {
+      try {
+        const char = String.fromCodePoint(wc);
+        return char === char.toUpperCase() && char !== char.toLowerCase() ? 1 : 0;
+      } catch {
+        return 0;
+      }
+    },
+    iswxdigit: (wc: number) => {
+      return (wc >= 48 && wc <= 57) || (wc >= 97 && wc <= 102) || (wc >= 65 && wc <= 70) ? 1 : 0;
+    },
+    towlower: (wc: number) => {
+      try {
+        const char = String.fromCodePoint(wc);
+        return char.toLowerCase().codePointAt(0) || wc;
+      } catch {
+        return wc;
+      }
+    }
+  };
+
+  // Intercept import of 'env'
+  Module.prototype.require = function(id: string) {
+    if (id === 'env') {
+      return envMock;
+    }
+    return originalRequire.apply(this, arguments);
+  };
+
+  const OriginalInstance = WebAssembly.Instance;
+  // @ts-ignore
+  WebAssembly.Instance = function (module, importObject) {
+    const instance = new OriginalInstance(module, importObject);
+    if (instance.exports && instance.exports.memory) {
+      memoryHolder.buffer = (instance.exports.memory as WebAssembly.Memory).buffer;
+    }
+    return instance;
+  };
+
+  try {
+    wasmPack = await import('@kreuzberg/tree-sitter-language-pack-wasm');
+  } finally {
+    // Restore original Node API to avoid pollution
+    Module.prototype.require = originalRequire;
+    WebAssembly.Instance = OriginalInstance;
   }
-  await promise;
+
+  return wasmPack;
 }
 
 export async function checkSyntax(
   content: string,
   filePath: string,
 ): Promise<SyntaxCheckResult> {
-  let lp: typeof import('@kreuzberg/tree-sitter-language-pack');
   try {
-    lp = await getLanguagePack();
-  } catch (err) {
-    return { ok: false, reason: `failed to load native language pack: ${err}` };
-  }
-
-  const lang = lp.detectLanguageFromPath(filePath);
-  if (!lang) return { ok: false, reason: `unsupported language: ${filePath}` };
-
-  try {
-    await ensureLanguage(lang, lp);
-  } catch {
-    return { ok: false, reason: `init failed for ${lang}` };
-  }
-
-  try {
-    const result = lp.process(content, {
-      language: lang,
-      diagnostics: true,
-    });
-    if (!result || typeof result !== 'object') {
-      return { ok: false, reason: 'native process returned unexpected value' };
+    const pack = await ensureWasmPack();
+    const lang = pack.detectLanguageFromPath(filePath);
+    if (!lang) {
+      return { ok: false, reason: `unsupported language: ${filePath}` };
     }
-    interface ProcessDiagnostic {
-      span: {
-        startLine: number;
-        startColumn: number;
-        endLine: number;
-        endColumn: number;
+
+    const parser = pack.WasmParser.default();
+    parser.setLanguage(lang);
+
+    const tree = parser.parse(content);
+    if (!tree) {
+      return { ok: false, reason: 'failed to parse tree content' };
+    }
+
+    function findErrors(node: any): any[] {
+      const list: any[] = [];
+      if (node.isError() || node.isMissing()) {
+        list.push(node);
+      }
+      const count = node.childCount();
+      for (let i = 0; i < count; i++) {
+        const child = node.child(i);
+        if (child) {
+          list.push(...findErrors(child));
+        }
+      }
+      return list;
+    }
+
+    const errorNodes = findErrors(tree.rootNode());
+
+    const errors: SyntaxError[] = errorNodes.map((node) => {
+      let message = 'Syntax error';
+      if (node.isMissing()) {
+        message = `Missing: ${node.kind()}`;
+      }
+      const start = node.startPosition();
+      const end = node.endPosition();
+      return {
+        line: start.row + 1,
+        column: start.column + 1,
+        endLine: end.row + 1,
+        endColumn: end.column + 1,
+        severity: 'error',
+        message,
       };
-      severity: string;
-      message: string;
-    }
-    const diags: ProcessDiagnostic[] =
-      (result as { diagnostics?: ProcessDiagnostic[] }).diagnostics ?? [];
-
-    if (diags.length === 0) return { ok: true, errors: [], lang };
+    });
 
     return {
       ok: true,
       lang,
-      errors: diags.map((d) => ({
-        line: d.span.startLine + 1,
-        column: d.span.startColumn + 1,
-        endLine: d.span.endLine + 1,
-        endColumn: d.span.endColumn + 1,
-        severity: d.severity,
-        message: d.message,
-      })),
+      errors,
     };
   } catch (err) {
     return {
