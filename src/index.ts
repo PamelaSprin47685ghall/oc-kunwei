@@ -257,6 +257,9 @@ const KunweiPlugin: Plugin = async (ctx) => {
             'stealth-browser-mcp_*': 'deny',
             runner_wait: 'deny',
             runner_abort: 'deny',
+            question: 'allow',
+            ...((opencodeConfig.agent?.orchestrator as Record<string, unknown> | undefined)
+              ?.permission as Record<string, unknown> | undefined),
           },
           mcps: [],
         } as Record<string, unknown>,
@@ -316,6 +319,13 @@ const KunweiPlugin: Plugin = async (ctx) => {
         }
         if (_name !== 'reviewer') {
           perm.submit_review_result = 'deny';
+        }
+        if (_name !== 'orchestrator') {
+          const userAgentEntry = userAgent[_name] as Record<string, unknown> | undefined;
+          const userPerm = userAgentEntry?.permission as Record<string, unknown> | undefined;
+          if (!userPerm || !('question' in userPerm)) {
+            perm.question = 'deny';
+          }
         }
         agent.permission = perm;
 

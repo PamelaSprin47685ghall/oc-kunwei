@@ -1,5 +1,5 @@
 import type { PluginInput } from '@opencode-ai/plugin';
-import { getActiveJobs, cleanupJob } from './tools.js';
+import { cleanupJob, getActiveJobs } from './tools.js';
 
 const RUNNER_NUDGE_PROMPT =
   '⚠️ [System Error] The task is still running in the background.\n' +

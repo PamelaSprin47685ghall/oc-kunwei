@@ -1,17 +1,17 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
-  isAbortError,
   extractSessionText,
-  promptWithAbort,
   extractToolContext,
+  isAbortError,
+  promptWithAbort,
 } from '../utils/session';
 import {
-  execute as executeCommand,
-  wait,
   abort,
   cleanupJob,
   type ExecuteResult,
+  execute as executeCommand,
+  wait,
 } from './tools.js';
 
 const RUNNER_SYSTEM_PROMPT = `You are a command output summarizer. The command has already been started by the system automatically. You only have two tools: runner_wait and runner_abort.
@@ -47,7 +47,7 @@ What to summarize:
 ${whatToSummarize}
 
 Execution output:
-${executeResult.output}${executeResult.message ? '\n\n' + executeResult.message : ''}`;
+${executeResult.output}${executeResult.message ? `\n\n${executeResult.message}` : ''}`;
   }
 
   return `The following ${language} program is running in background.
@@ -63,7 +63,7 @@ What to summarize:
 ${whatToSummarize}
 
 Initial output (first 5 seconds):
-${executeResult.output}${executeResult.message ? '\n\n' + executeResult.message : ''}
+${executeResult.output}${executeResult.message ? `\n\n${executeResult.message}` : ''}
 
 You must use runner_wait to poll for more output, or runner_abort to stop the task.`;
 }
@@ -73,10 +73,10 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-       'Executes a shell command or Python code and returns a natural-language summary. ' +
-       'Supports both quick synchronous execution and long-running background tasks. ' +
-       'Automatically handles timeout management and provides incremental output monitoring. ' +
-       'IMPORTANT: If executing Python code (language="python"), you must specify all necessary third-party package dependencies (e.g. numpy, pandas, requests) in the "dependencies" argument so they can be installed and resolved before execution.',
+      'Executes a shell command or Python code and returns a natural-language summary. ' +
+      'Supports both quick synchronous execution and long-running background tasks. ' +
+      'Automatically handles timeout management and provides incremental output monitoring. ' +
+      'IMPORTANT: If executing Python code (language="python"), you must specify all necessary third-party package dependencies (e.g. numpy, pandas, requests) in the "dependencies" argument so they can be installed and resolved before execution.',
 
     args: {
       language: tool.schema
@@ -85,11 +85,15 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
         .describe('Execution language'),
       program: tool.schema
         .string()
-        .describe('The program to execute. Can be a shell command or Python code depending on language'),
-        dependencies: tool.schema
-          .array(tool.schema.string())
-          .optional()
-          .describe('Python dependencies to install (only for python language). For Python programs, you must explicitly specify all third-party libraries used in the code to ensure they are available.'),
+        .describe(
+          'The program to execute. Can be a shell command or Python code depending on language',
+        ),
+      dependencies: tool.schema
+        .array(tool.schema.string())
+        .optional()
+        .describe(
+          'Python dependencies to install (only for python language). For Python programs, you must explicitly specify all third-party libraries used in the code to ensure they are available.',
+        ),
       what_to_summarize: tool.schema
         .string()
         .describe('What to look for in the output. Be specific.'),
@@ -162,7 +166,8 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
 
 export function createRunnerWaitTool(): ToolDefinition {
   return tool({
-    description: 'Wait for the background task to produce more output or finish.',
+    description:
+      'Wait for the background task to produce more output or finish.',
     args: {
       ms: tool.schema
         .number()

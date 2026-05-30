@@ -1,16 +1,17 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
+  chmodSync,
+  createWriteStream,
+  existsSync,
   mkdirSync,
+  readFileSync,
   unlinkSync,
   writeFileSync,
-  readFileSync,
-  existsSync,
-  chmodSync,
 } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createWriteStream } from 'node:fs';
+import { join } from 'node:path';
+import { stripHeadTailPipes } from './no-head-tail.js';
 
 export interface ActiveJob {
   childProcess: ChildProcess;
@@ -126,10 +127,10 @@ export interface ExecuteResult {
   message?: string;
 }
 
-export async function execute(
-  options: ExecuteOptions,
-): Promise<ExecuteResult> {
-  const { sessionId, program, language, dependencies, earlyTimeoutMs } = options;
+export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
+  const { sessionId, language, dependencies, earlyTimeoutMs } = options;
+  let { program } = options;
+  if (language === 'shell') program = stripHeadTailPipes(program).script;
   const timeoutMs = earlyTimeoutMs ?? 5000;
 
   const existingJob = activeJobs.get(sessionId);
@@ -232,11 +233,15 @@ export async function execute(
   try {
     const isCompletedEarly = await Promise.race([
       job.closePromise.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+      new Promise<boolean>((resolve) =>
+        setTimeout(() => resolve(false), timeoutMs),
+      ),
     ]);
 
     if (isCompletedEarly) {
-      const fullOutput = existsSync(logPath) ? readFileSync(logPath, 'utf-8') : '';
+      const fullOutput = existsSync(logPath)
+        ? readFileSync(logPath, 'utf-8')
+        : '';
       cleanupJob(sessionId);
       return {
         output: fullOutput.trim() || '(no output)',
@@ -256,7 +261,9 @@ export async function execute(
     throw error;
   }
 
-  const partialOutput = existsSync(logPath) ? readFileSync(logPath, 'utf-8') : '';
+  const partialOutput = existsSync(logPath)
+    ? readFileSync(logPath, 'utf-8')
+    : '';
   job.bytesRead = partialOutput.length;
 
   return {
@@ -286,7 +293,9 @@ export async function wait(options: WaitOptions): Promise<WaitResult> {
 
   const job = activeJobs.get(sessionId);
   if (!job) {
-    throw new Error('No active job found. Use execute() to start a task first.');
+    throw new Error(
+      'No active job found. Use execute() to start a task first.',
+    );
   }
 
   if (job.status === 'completed' || job.status === 'aborted') {

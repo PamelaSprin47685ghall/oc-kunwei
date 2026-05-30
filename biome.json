@@ -1,7 +1,7 @@
 {
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "files": {
-    "includes": ["src/index.ts", "src/refer-caps/**/*.ts", "src/nudge-todo/**/*.ts", "src/basher/**/*.ts", "src/editor/**/*.ts", "src/explorer/**/*.ts", "src/ollama-web/**/*.ts", "src/reverie/**/*.ts", "src/loop/**/*.ts", "src/inject-caps/**/*.ts", "src/utils/**/*.ts"]
+    "includes": ["src/basher/**/*.ts", "src/editor/**/*.ts", "src/explorer/**/*.ts", "src/index.ts", "src/inject-caps/**/*.ts", "src/loop/**/*.ts", "src/nudge-todo/**/*.ts", "src/ollama-web/**/*.ts", "src/refer-caps/**/*.ts", "src/reverie/**/*.ts", "src/runner/**/*.ts", "src/utils/**/*.ts"]
   },
   "vcs": {
     "enabled": false,
