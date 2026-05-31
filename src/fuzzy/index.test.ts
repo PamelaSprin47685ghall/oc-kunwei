@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  consumeIterator,
   formatFindOutput,
   formatGrepOutput,
-  getFindCursor,
-  getGrepCursor,
-  storeFindCursor,
-  storeGrepCursor,
+  storeIterator,
 } from './format';
 import { resolveExternalBasePath } from './index';
 import {
@@ -186,14 +184,8 @@ describe('formatGrepOutput', () => {
 
 describe('formatFindOutput', () => {
   it('returns no files message for empty result', () => {
-    const result = formatFindOutput(
-      { items: [], scores: [], totalMatched: 0 },
-      null,
-      'test',
-    );
-    expect(result.output).toBe('No files found matching pattern');
-    expect(result.weak).toBe(false);
-    expect(result.totalMatched).toBe(0);
+    const result = formatFindOutput({ items: [], totalFiles: 0, totalMatched: 0 });
+    expect(result).toBe('No matching files found');
   });
 
   it('formats file paths with total count', () => {
@@ -211,32 +203,15 @@ describe('formatFindOutput', () => {
             gitStatus: 'clean',
           },
         ],
-        scores: [
-          {
-            total: 100,
-            baseScore: 80,
-            filenameBonus: 10,
-            specialFilenameBonus: 0,
-            frecencyBoost: 10,
-            distancePenalty: 0,
-            currentFilePenalty: 0,
-            comboMatchBoost: 0,
-            exactMatch: false,
-            matchType: 'fuzzy',
-          },
-        ],
+        totalFiles: 20,
         totalMatched: 1,
       },
-      null,
-      'main',
     );
-    expect(result.output).toContain('1 result');
-    expect(result.output).toContain('src/main.ts');
-    expect(result.weak).toBe(false);
-    expect(result.totalMatched).toBe(1);
+    expect(result).toContain('1 matching file (20 total indexed)');
+    expect(result).toContain('src/main.ts');
   });
 
-  it('detects weak matches with low score', () => {
+  it('formats multiple matches without score heuristics', () => {
     const result = formatFindOutput(
       {
         items: [
@@ -251,62 +226,31 @@ describe('formatFindOutput', () => {
             gitStatus: 'clean',
           },
         ],
-        scores: [
-          {
-            total: 5,
-            baseScore: 5,
-            filenameBonus: 0,
-            specialFilenameBonus: 0,
-            frecencyBoost: 0,
-            distancePenalty: 0,
-            currentFilePenalty: 0,
-            comboMatchBoost: 0,
-            exactMatch: false,
-            matchType: 'fuzzy',
-          },
-        ],
+        totalFiles: 250,
         totalMatched: 10,
       },
-      null,
-      'veryLongQueryPattern',
     );
-    expect(result.weak).toBe(true);
-    expect(result.shownCount).toBeLessThanOrEqual(5);
-    expect(result.totalMatched).toBe(10);
-    expect(result.output).toContain('10 results');
-    expect(result.output).toContain('weak matches');
+    expect(result).toContain('10 matching files (250 total indexed)');
+    expect(result).toContain('src/unrelated.ts');
   });
 });
 
-describe('grep cursor store', () => {
-  it('stores and retrieves cursors', () => {
-    const cursor = { __brand: 'GrepCursor' as const, _offset: 42 };
-    const id = storeGrepCursor(cursor);
-    expect(id).toMatch(/^fff_c\d+$/);
-    expect(getGrepCursor(id)?._offset).toBe(42);
-  });
-
-  it('returns undefined for unknown cursor id', () => {
-    expect(getGrepCursor('nonexistent')).toBeUndefined();
-  });
-});
-
-describe('find cursor store', () => {
-  it('stores and retrieves find cursor data', () => {
+describe('iterator store', () => {
+  it('stores and consumes iterator data once', () => {
     const data = {
       query: 'src/main',
-      pattern: 'main',
       pageSize: 20,
-      nextPageIndex: 1,
+      pageIndex: 1,
     };
-    const id = storeFindCursor(data);
-    expect(id).toBeDefined();
-    const retrieved = getFindCursor(id);
+    const id = storeIterator('ffi_f', data);
+    expect(id).toMatch(/^ffi_f\d+$/);
+    const retrieved = consumeIterator<typeof data>(id);
     expect(retrieved?.query).toBe('src/main');
-    expect(retrieved?.nextPageIndex).toBe(1);
+    expect(retrieved?.pageIndex).toBe(1);
+    expect(consumeIterator(id)).toBeUndefined();
   });
 
-  it('returns undefined for unknown find cursor id', () => {
-    expect(getFindCursor('99999')).toBeUndefined();
+  it('returns undefined for unknown iterator id', () => {
+    expect(consumeIterator('missing')).toBeUndefined();
   });
 });

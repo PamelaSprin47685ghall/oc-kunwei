@@ -11,6 +11,7 @@ import {
 } from './loop/index.js';
 import { createNudgeTodoHook } from './nudge-todo/index.js';
 import {
+  createFuzzyFindTool,
   createFuzzyGrepTool,
 } from './fuzzy/index.js';
 import {
@@ -52,8 +53,10 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     submit_review_result: false,
     edit: false,
     write: false,
-    glob: false,
+    glob: true,
     grep: false,
+    fuzzy_find: true,
+    fuzzy_grep: true,
     task: false,
     'stealth_browser_mcp_*': false,
   },
@@ -63,7 +66,9 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     edit: true,
     runner: true,
     glob: true,
-    grep: true,
+    grep: false,
+    fuzzy_find: true,
+    fuzzy_grep: true,
     editor: false,
     greper: false,
     reverie: false,
@@ -92,6 +97,8 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     browser: false,
     glob: false,
     grep: false,
+    fuzzy_find: false,
+    fuzzy_grep: false,
     task: false,
     runner_wait: false,
     runner_abort: false,
@@ -101,7 +108,9 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     read: true,
     runner: true,
     glob: true,
-    grep: true,
+    grep: false,
+    fuzzy_find: true,
+    fuzzy_grep: true,
     editor: false,
     greper: false,
     reverie: false,
@@ -133,6 +142,8 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     browser: false,
     glob: false,
     grep: false,
+    fuzzy_find: false,
+    fuzzy_grep: false,
     task: false,
     runner_wait: false,
     runner_abort: false,
@@ -154,6 +165,8 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     browser: false,
     glob: false,
     grep: false,
+    fuzzy_find: false,
+    fuzzy_grep: false,
     task: false,
     'stealth_browser_mcp_*': false,
   },
@@ -172,6 +185,8 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     browser: false,
     glob: false,
     grep: false,
+    fuzzy_find: false,
+    fuzzy_grep: false,
     task: false,
     runner_wait: false,
     runner_abort: false,
@@ -202,7 +217,8 @@ const KunweiPlugin: Plugin = async (ctx) => {
       websearch: createOllamaWebSearchTool(),
       runner: createRunnerTool(ctx),
       browser: createBrowserTool(ctx),
-      grep: createFuzzyGrepTool(),
+      fuzzy_find: createFuzzyFindTool(),
+      fuzzy_grep: createFuzzyGrepTool(),
       runner_wait: createRunnerWaitTool(),
       runner_abort: createRunnerAbortTool(),
     },
@@ -241,6 +257,10 @@ const KunweiPlugin: Plugin = async (ctx) => {
             websearch: true,
             runner: true,
             browser: true,
+            glob: true,
+            grep: false,
+            fuzzy_find: true,
+            fuzzy_grep: true,
             submit_review_result: false,
             runner_wait: false,
             runner_abort: false,
@@ -248,8 +268,10 @@ const KunweiPlugin: Plugin = async (ctx) => {
           permission: {
             edit: 'deny',
             write: 'deny',
-            glob: 'deny',
+            glob: 'allow',
             grep: 'deny',
+            fuzzy_find: 'allow',
+            fuzzy_grep: 'allow',
             task: 'deny',
             bash: 'deny',
             'stealth-browser-mcp_*': 'deny',
@@ -318,6 +340,17 @@ const KunweiPlugin: Plugin = async (ctx) => {
         if (_name !== 'reviewer') {
           perm.submit_review_result = 'deny';
         }
+        if (_name !== 'editor' && _name !== 'greper' && _name !== 'orchestrator') {
+          perm.glob = 'deny';
+        }
+        if (_name === 'editor' || _name === 'greper' || _name === 'orchestrator') {
+          perm.fuzzy_find = 'allow';
+          perm.fuzzy_grep = 'allow';
+        } else {
+          perm.fuzzy_find = 'deny';
+          perm.fuzzy_grep = 'deny';
+        }
+        perm.grep = 'deny';
         if (_name !== 'orchestrator') {
           const userAgentEntry = userAgent[_name] as Record<string, unknown> | undefined;
           const userPerm = userAgentEntry?.permission as Record<string, unknown> | undefined;

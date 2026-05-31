@@ -12,7 +12,9 @@ describe('getEditorConfig', () => {
       edit: 'allow',
       bash: 'deny',
       glob: 'allow',
-      grep: 'allow',
+      grep: 'deny',
+      fuzzy_find: 'allow',
+      fuzzy_grep: 'allow',
       task: 'deny',
     });
   });

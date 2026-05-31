@@ -4,8 +4,8 @@ import { extractToolContext, runSubagent } from '../utils/session';
 
 const GREPER_SYSTEM_PROMPT =
   'You are a code exploration agent. Given a search query, explore the codebase to find relevant code in the workspace. ' +
-  'Use the `glob` tool to find files by name or path patterns. ' +
-  'Use the `grep` tool to search file contents for keywords, patterns, or code snippets. ' +
+  'Use the `fuzzy_find` tool for fuzzy file discovery and the built-in `glob` tool when you need strict path-pattern filtering. ' +
+  'Use the `fuzzy_grep` tool to search file contents for keywords, patterns, or code snippets. ' +
   'After locating relevant files, use the `read` tool to read their contents. ' +
   'Provide a detailed summary of what you found, including file paths and key code sections. ' +
   'You have access to basher for read-only exploration commands (e.g., listing files, checking git status). ' +
@@ -49,7 +49,7 @@ export function getGreperConfig() {
         prompt: GREPER_SYSTEM_PROMPT,
         mode: 'subagent' as const,
         mcps: [],
-        permission: { read: 'allow', glob: 'allow', bash: 'deny', edit: 'deny', write: 'deny', grep: 'allow', task: 'deny' } as Record<string, unknown>,
+        permission: { read: 'allow', glob: 'allow', bash: 'deny', edit: 'deny', write: 'deny', grep: 'deny', fuzzy_find: 'allow', fuzzy_grep: 'allow', task: 'deny' } as Record<string, unknown>,
       },
     },
   };

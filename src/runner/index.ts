@@ -221,6 +221,8 @@ export function getRunnerConfig() {
           write: 'deny',
           glob: 'deny',
           grep: 'deny',
+          fuzzy_find: 'deny',
+          fuzzy_grep: 'deny',
           task: 'deny',
           read: 'deny',
           runner_wait: 'allow',

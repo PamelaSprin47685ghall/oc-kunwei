@@ -1,9 +1,9 @@
-// Type-only import from @ff-labs/fff-node — erased at build time.
+// Type-only import from @ff-labs/fff-node - erased at build time.
 // The package is an optional dependency; types are used for internal
-// cursor/result shapes only.
-import type { GrepCursor, GrepResult, SearchResult } from '@ff-labs/fff-node';
+// result shapes only.
+import type { GrepResult, SearchResult } from '@ff-labs/fff-node';
 
-// ── Line truncation ──
+// -- Line truncation --
 
 const GREP_MAX_LINE_LENGTH = 500;
 
@@ -12,7 +12,7 @@ function truncateLine(line: string, max = GREP_MAX_LINE_LENGTH): string {
   return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}...`;
 }
 
-// ── File annotation ──
+// -- File annotation --
 
 const HOT_FRECENCY = 25;
 const WARM_FRECENCY = 20;
@@ -38,7 +38,7 @@ function fffFileAnnotation(item: FileAnnotationItem): string {
   return '';
 }
 
-// ── Grep output formatting ──
+// -- Grep output formatting --
 
 export function formatGrepOutput(
   result: Pick<GrepResult, 'items' | 'totalMatched'>,
@@ -75,109 +75,46 @@ export function formatGrepOutput(
   }
 }
 
-// ── Find output formatting ──
-
-const FIND_WEAK_SAMPLE_SIZE = 5;
-
-function weakScoreThreshold(pattern: string): number {
-  const perfect = (pattern || '').length * 12;
-  return Math.floor((perfect * 50) / 100);
-}
-
-export interface FormattedFindOutput {
-  output: string;
-  weak: boolean;
-  shownCount: number;
-  totalMatched: number;
-}
+// -- Find output formatting --
 
 export function formatFindOutput(
-  result: Pick<SearchResult, 'items' | 'scores' | 'totalMatched'>,
-  limit: number | null,
-  pattern: string,
-): FormattedFindOutput {
+  result: Pick<SearchResult, 'items' | 'totalFiles' | 'totalMatched'>,
+): string {
   try {
-    if (!result?.items?.length) {
-      return {
-        output: 'No files found matching pattern',
-        weak: false,
-        shownCount: 0,
-        totalMatched: 0,
-      };
-    }
-    const topScore = result.scores?.[0]?.total ?? 0;
-    const weak = topScore < weakScoreThreshold(pattern);
+    if (!result?.items?.length) return 'No matching files found';
     const totalMatched = result.totalMatched ?? result.items.length;
-    const effectiveLimit = weak
-      ? Math.min(FIND_WEAK_SAMPLE_SIZE, limit ?? totalMatched)
-      : (limit ?? totalMatched);
-    const shown = result.items.slice(0, effectiveLimit);
-    const header = `${totalMatched} result${totalMatched === 1 ? '' : 's'}${weak ? ` (weak matches, showing ${shown.length})` : ''}`;
-    return {
-      output: `${header}\n${shown
-        .map((p: { relativePath?: string } | null) =>
-          p
-            ? `${p.relativePath}${fffFileAnnotation(p as FileAnnotationItem)}`
-            : '',
-        )
-        .filter(Boolean)
-        .join('\n')}`,
-      weak,
-      shownCount: shown.length,
-      totalMatched,
-    };
+    const totalFiles = result.totalFiles ?? 0;
+    const lines: string[] = [
+      `${totalMatched} matching file${totalMatched === 1 ? '' : 's'} (${totalFiles} total indexed)`,
+      '',
+    ];
+    for (const item of result.items) {
+      if (!item) continue;
+      lines.push(`${item.relativePath}${fffFileAnnotation(item as FileAnnotationItem)}`);
+    }
+    return lines.join('\n');
   } catch {
-    return {
-      output: '(error formatting find output)',
-      weak: false,
-      shownCount: 0,
-      totalMatched: 0,
-    };
+    return '(error formatting find output)';
   }
 }
 
-// ── Grep cursor store ──
+// -- Iterator store --
 
-const grepCursorCache = new Map<string, GrepCursor>();
-let grepCursorCounter = 0;
+const iteratorStore = new Map<string, unknown>();
+let iteratorCounter = 0;
 
-export function storeGrepCursor(cursor: GrepCursor): string {
-  const id = `fff_c${++grepCursorCounter}`;
-  grepCursorCache.set(id, cursor);
-  if (grepCursorCache.size > 200) {
-    const first = grepCursorCache.keys().next().value;
-    if (first) grepCursorCache.delete(first);
+export function storeIterator(prefix: string, data: unknown): string {
+  const id = `${prefix}${++iteratorCounter}`;
+  iteratorStore.set(id, data);
+  if (iteratorStore.size > 200) {
+    const first = iteratorStore.keys().next().value;
+    if (first) iteratorStore.delete(first);
   }
   return id;
 }
 
-export function getGrepCursor(id: string): GrepCursor | undefined {
-  return grepCursorCache.get(id);
-}
-
-// ── Find cursor store ──
-
-export interface FindCursorData {
-  query: string;
-  pattern: string;
-  pageSize: number;
-  nextPageIndex: number;
-  externalBasePath?: string | null;
-}
-
-const findCursorCache = new Map<string, FindCursorData>();
-let findCursorCounter = 0;
-
-export function storeFindCursor(data: FindCursorData): string {
-  const id = `${++findCursorCounter}`;
-  findCursorCache.set(id, data);
-  if (findCursorCache.size > 200) {
-    const first = findCursorCache.keys().next().value;
-    if (first) findCursorCache.delete(first);
-  }
-  return id;
-}
-
-export function getFindCursor(id: string): FindCursorData | undefined {
-  return findCursorCache.get(id);
+export function consumeIterator<T>(id: string): T | undefined {
+  const value = iteratorStore.get(id) as T | undefined;
+  if (value !== undefined) iteratorStore.delete(id);
+  return value;
 }

@@ -592,6 +592,8 @@ export function getReviewerConfig() {
           write: 'deny',
           glob: 'deny',
           grep: 'deny',
+          fuzzy_find: 'deny',
+          fuzzy_grep: 'deny',
           task: 'deny',
         } as Record<string, unknown>,
       },

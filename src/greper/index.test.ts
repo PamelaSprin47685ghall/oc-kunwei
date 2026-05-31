@@ -12,7 +12,9 @@ describe('getGreperConfig', () => {
       bash: 'deny',
       edit: 'deny',
       write: 'deny',
-      grep: 'allow',
+      grep: 'deny',
+      fuzzy_find: 'allow',
+      fuzzy_grep: 'allow',
       task: 'deny',
     });
   });

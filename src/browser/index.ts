@@ -54,6 +54,8 @@ export function getBrowserConfig() {
           edit: 'deny',
           glob: 'deny',
           grep: 'deny',
+          fuzzy_find: 'deny',
+          fuzzy_grep: 'deny',
           task: 'deny',
         } as Record<string, unknown>,
       },
