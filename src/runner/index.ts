@@ -41,7 +41,7 @@ Task completed.
 Program:
 ${program}
 
-${language === 'python' && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
+${(language === 'python' || language === 'javascript') && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
 
 What to summarize:
 ${whatToSummarize}
@@ -57,7 +57,7 @@ ${executeResult.output}${executeResult.message ? `\n\n${executeResult.message}` 
 Program:
 ${program}
 
-${language === 'python' && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
+${(language === 'python' || language === 'javascript') && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
 
 What to summarize:
 ${whatToSummarize}
@@ -73,26 +73,26 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
 
   return tool({
     description:
-      'Executes a shell command or Python code and returns a natural-language summary. ' +
+      'Executes a shell command, Python code, or JavaScript/TypeScript program and returns a natural-language summary. ' +
       'Supports both quick synchronous execution and long-running background tasks. ' +
       'Automatically handles timeout management and provides incremental output monitoring. ' +
-      'IMPORTANT: If executing Python code (language="python"), you must specify all necessary third-party package dependencies (e.g. numpy, pandas, requests) in the "dependencies" argument so they can be installed and resolved before execution.',
+      'IMPORTANT: If executing Python (language="python") or JavaScript (language="javascript") code, you must specify all necessary third-party package dependencies (e.g. numpy, pandas, requests for Python; lodash, axios for JavaScript) in the "dependencies" argument so they can be installed and resolved before execution.',
 
     args: {
       language: tool.schema
-        .enum(['shell', 'python'])
+        .enum(['shell', 'python', 'javascript'])
         .default('shell')
-        .describe('Execution language'),
+        .describe('Execution language: shell, python, or javascript'),
       program: tool.schema
         .string()
         .describe(
-          'The program to execute. Can be a shell command or Python code depending on language',
+          'The program to execute. Can be a shell command, Python code, or JavaScript/TypeScript code depending on language',
         ),
       dependencies: tool.schema
         .array(tool.schema.string())
         .optional()
         .describe(
-          'Python dependencies to install (only for python language). For Python programs, you must explicitly specify all third-party libraries used in the code to ensure they are available.',
+          'Dependencies to install (for python or javascript language). For Python or JavaScript programs, explicitly specify all third-party libraries used in the code to ensure they are available.',
         ),
       what_to_summarize: tool.schema
         .string()
