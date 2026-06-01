@@ -5,7 +5,7 @@ export function normalizePathConstraint(
   cwd = process.cwd(),
 ): string | null {
   let trimmed = pathConstraint.trim();
-  if (!trimmed) return trimmed;
+  if (!trimmed) return null;
 
   if (path.isAbsolute(trimmed)) {
     const relative = path.relative(cwd, trimmed).replaceAll(path.sep, '/');

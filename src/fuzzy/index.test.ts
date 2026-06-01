@@ -44,7 +44,7 @@ describe('resolveExternalBasePath', () => {
 
 describe('normalizePathConstraint', () => {
   it('returns null for empty path', () => {
-    expect(normalizePathConstraint('')).toBe('');
+    expect(normalizePathConstraint('')).toBeNull();
   });
 
   it('returns null for current directory', () => {

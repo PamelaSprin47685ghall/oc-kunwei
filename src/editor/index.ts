@@ -4,7 +4,7 @@ import { extractToolContext, runSubagent } from '../utils/session';
 
 const EDITOR_SYSTEM_PROMPT =
   'You are a code editing assistant. Given a task description, implement the necessary code changes in the workspace. ' +
-  'You can read files, edit files, write new files, and run commands via basher. ' +
+  'You can read files, edit files, write new files, and run commands via runner. ' +
   'IMPORTANT: You must only statically verify code correctness by reading and reasoning — never actually run, execute, or test any code. ' +
   'When done, describe what you changed and why.';
 

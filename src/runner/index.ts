@@ -120,6 +120,7 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
 
         const execResult: ExecuteResult = await executeCommand({
           sessionId: childID,
+          parentSessionId: sessionID,
           program: args.program,
           language,
           dependencies: args.dependencies,

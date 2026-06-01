@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { createGreperTool, getGreperConfig } from './index';
 
 describe('getGreperConfig', () => {
-  test('returns greper agent with basher tool and read permission', () => {
+  test('returns greper agent with runner tool and read permission', () => {
     const cfg = getGreperConfig();
     expect(cfg.agents.greper.mode).toBe('subagent');
     expect(cfg.agents.greper.prompt).toContain('code exploration');
@@ -19,9 +19,9 @@ describe('getGreperConfig', () => {
     });
   });
 
-  test('prompt warns against using basher for modifications', () => {
+  test('prompt warns against using runner for modifications', () => {
     const cfg = getGreperConfig();
-    expect(cfg.agents.greper.prompt).toContain('Do NOT use basher');
+    expect(cfg.agents.greper.prompt).toContain('Do NOT use runner');
   });
 });
 

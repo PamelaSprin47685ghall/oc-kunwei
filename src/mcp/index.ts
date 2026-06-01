@@ -3,7 +3,7 @@ import type { LocalMcpConfig, McpConfig, RemoteMcpConfig } from './types.js';
 export { type LocalMcpConfig, type McpConfig, type RemoteMcpConfig } from './types.js';
 
 const STEALTH_BROWSER_MCP_REPO = 'https://github.com/vibheksoni/stealth-browser-mcp.git';
-const STEALTH_BROWSER_MCP_REF = process.env.STEALTH_BROWSER_MCP_REF ?? 'main';
+const STEALTH_BROWSER_MCP_REF = process.env.STEALTH_BROWSER_MCP_REF ?? 'master';
 
 export const stealthBrowserMcp: LocalMcpConfig = {
   type: 'local',

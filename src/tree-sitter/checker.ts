@@ -161,7 +161,10 @@ async function loadPackWithShim(): Promise<WasmPack> {
   ) {
     const instance = new originalInstance(module, importObject);
     const memory = (instance.exports as { memory?: WebAssembly.Memory }).memory;
-    if (memory) shimMemory.buffer = memory.buffer;
+    const isTarget = importObject &&
+      (importObject.env === envShim ||
+       (importObject.env && (importObject.env as any).strcmp === envShim.strcmp));
+    if (memory && isTarget) shimMemory.buffer = memory.buffer;
     return instance;
   } as unknown as typeof WebAssembly.Instance;
 
@@ -183,7 +186,10 @@ async function getPack(): Promise<WasmPack> {
 
 function findErrorNodes(node: WasmNode): WasmNode[] {
   const out: WasmNode[] = [];
-  if (node.isError() || node.isMissing()) out.push(node);
+  if (node.isError() || node.isMissing()) {
+    out.push(node);
+    return out;
+  }
   const count = node.childCount();
   for (let i = 0; i < count; i++) {
     const child = node.child(i);

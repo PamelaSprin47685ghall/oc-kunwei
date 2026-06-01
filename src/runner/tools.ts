@@ -5,6 +5,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   unlinkSync,
   type WriteStream,
@@ -19,6 +20,7 @@ export type RunnerLanguage = 'shell' | 'python' | 'javascript';
 
 export interface ActiveJob {
   sessionId: string;
+  parentSessionId?: string;
   childProcess: ChildProcess | null;
   stdoutFile: string;
   tempPath?: string;
@@ -42,8 +44,13 @@ function getRunnerLogPath(sessionId: string): string {
   return join(RUNNER_LOG_DIR, `runner-${sessionId}.log`);
 }
 
-function getRunnerProjectDir(sessionId: string): string {
-  const dir = join(RUNNER_LOG_DIR, `runner-${sessionId}`);
+function getRunnerProjectDir(sessionId?: string): string {
+  if (sessionId) {
+    const dir = join(RUNNER_LOG_DIR, `runner-${sessionId}`);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+  const dir = join(RUNNER_LOG_DIR, 'runner');
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -74,10 +81,7 @@ function killTree(childProcess: ChildProcess | null): void {
   }
 }
 
-export function cleanupJob(sessionId: string): void {
-  const job = activeJobs.get(sessionId);
-  if (!job) return;
-
+function cleanupSingleJob(job: ActiveJob): void {
   if (job.status === 'running') {
     try {
       job.abortController.abort();
@@ -95,13 +99,35 @@ export function cleanupJob(sessionId: string): void {
     if (existsSync(job.stdoutFile)) unlinkSync(job.stdoutFile);
   } catch {}
 
-  if (job.projectDir && existsSync(job.projectDir)) {
+  const sessionDir = join(RUNNER_LOG_DIR, `runner-${job.sessionId}`);
+  if (existsSync(sessionDir)) {
     try {
-      rmSync(job.projectDir, { recursive: true, force: true });
+      rmSync(sessionDir, { recursive: true, force: true });
     } catch {}
   }
 
-  activeJobs.delete(sessionId);
+  if (job.projectDir && job.projectDir !== join(RUNNER_LOG_DIR, 'runner')) {
+    if (existsSync(job.projectDir)) {
+      try {
+        rmSync(job.projectDir, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+
+  activeJobs.delete(job.sessionId);
+}
+
+export function cleanupJob(sessionId: string): void {
+  const directJob = activeJobs.get(sessionId);
+  if (directJob) {
+    cleanupSingleJob(directJob);
+    return;
+  }
+  for (const job of activeJobs.values()) {
+    if (job.parentSessionId === sessionId) {
+      cleanupSingleJob(job);
+    }
+  }
 }
 
 function createTempShellScript(scriptPath: string, program: string): string {
@@ -217,19 +243,43 @@ function runChildProcess(
   });
 }
 
+interface PackageJson {
+  type?: string;
+  dependencies?: Record<string, string>;
+  [key: string]: unknown;
+}
+
 async function ensureJavascriptProject(
   projectDir: string,
   dependencies: string[] | undefined,
 ): Promise<void> {
   mkdirSync(projectDir, { recursive: true });
-  writeFileSync(
-    join(projectDir, 'package.json'),
-    '{"type":"module"}\n',
-    'utf-8',
-  );
+  const pkgPath = join(projectDir, 'package.json');
+  let pkgData: PackageJson = { type: 'module', dependencies: {} };
+
+  if (existsSync(pkgPath)) {
+    try {
+      pkgData = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    } catch {}
+  }
+  if (!pkgData.dependencies) {
+    pkgData.dependencies = {};
+  }
 
   const requiredPackages = [...new Set(['tsx', ...(dependencies ?? [])])];
-  if (requiredPackages.length === 0) return;
+  const toInstall: string[] = [];
+  for (const pkg of requiredPackages) {
+    if (!pkgData.dependencies[pkg]) {
+      toInstall.push(pkg);
+    }
+  }
+
+  if (toInstall.length === 0) return;
+
+  for (const pkg of toInstall) {
+    pkgData.dependencies[pkg] = '*';
+  }
+  writeFileSync(pkgPath, `${JSON.stringify(pkgData, null, 2)}\n`, 'utf-8');
 
   await runChildProcess({
     command: 'npx',
@@ -239,7 +289,7 @@ async function ensureJavascriptProject(
       'install',
       '--prefix',
       projectDir,
-      ...requiredPackages,
+      ...toInstall,
     ],
     cwd: projectDir,
   });
@@ -359,6 +409,7 @@ async function executeJavascriptProgram(
 
 export interface ExecuteOptions {
   sessionId: string;
+  parentSessionId?: string;
   program: string;
   language: RunnerLanguage;
   dependencies?: string[];
@@ -395,6 +446,7 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
 
   const job: ActiveJob = {
     sessionId,
+    parentSessionId: options.parentSessionId,
     childProcess: null,
     stdoutFile: logPath,
     abortController: new AbortController(),
@@ -405,7 +457,9 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
     writeStream,
     finalOutput: '',
   };
-  if (language === 'javascript' || language === 'python') {
+  if (language === 'javascript') {
+    job.projectDir = getRunnerProjectDir(); // Unified project dir
+  } else if (language === 'python') {
     job.projectDir = getRunnerProjectDir(sessionId);
   }
   activeJobs.set(sessionId, job);
