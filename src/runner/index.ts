@@ -1,5 +1,6 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { buildRunnerPrompt, RUNNER_SYSTEM_PROMPT } from 'engine/runner';
 import {
   extractSessionText,
   extractToolContext,
@@ -14,59 +15,7 @@ import {
   wait,
 } from './tools.js';
 
-const RUNNER_SYSTEM_PROMPT = `You are a command output summarizer. The command has already been started by the system automatically. You only have two tools: runner_wait and runner_abort.
-
-## Rules
-- For quick tasks (when you see "Task completed"), directly summarize the complete output
-- For long-running tasks (when you see "任务已转入后台"), you must use runner_wait to poll for updates, or runner_abort to stop the task
-- Summarize the command output clearly and concisely
-- Focus on what was requested in "What to summarize"
-- Include any errors, warnings, or failures explicitly
-- Do not fabricate information not present in the output
-- Keep the summary focused and relevant
-- If the output is empty or contains only system messages, state that clearly`;
-
-function buildRunnerPrompt(
-  language: string,
-  program: string,
-  dependencies: string[] | undefined,
-  whatToSummarize: string,
-  executeResult: ExecuteResult,
-): string {
-  if (!executeResult.background) {
-    return `The following ${language} program has been executed.
-
-Task completed.
-
-Program:
-${program}
-
-${(language === 'python' || language === 'javascript') && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
-
-What to summarize:
-${whatToSummarize}
-
-Execution output:
-${executeResult.output}${executeResult.message ? `\n\n${executeResult.message}` : ''}`;
-  }
-
-  return `The following ${language} program is running in background.
-
-任务已转入后台。
-
-Program:
-${program}
-
-${(language === 'python' || language === 'javascript') && dependencies?.length ? `Dependencies: ${dependencies.join(', ')}` : ''}
-
-What to summarize:
-${whatToSummarize}
-
-Initial output (first 5 seconds):
-${executeResult.output}${executeResult.message ? `\n\n${executeResult.message}` : ''}
-
-You must use runner_wait to poll for more output, or runner_abort to stop the task.`;
-}
+export { RUNNER_SYSTEM_PROMPT };
 
 export function createRunnerTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;
@@ -92,7 +41,7 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
         .array(tool.schema.string())
         .optional()
         .describe(
-          'Dependencies to install (for python or javascript language). For Python or JavaScript programs, explicitly specify all third-party libraries used in the code to ensure they are available.',
+          'Dependencies to install (for python or javascript language). For Python or JavaScript programs, explicitly specify all third-party libraries used in the code so they can be available.',
         ),
       what_to_summarize: tool.schema
         .string()
@@ -132,7 +81,9 @@ export function createRunnerTool(ctx: PluginInput): ToolDefinition {
           args.program,
           args.dependencies,
           args.what_to_summarize,
-          execResult,
+          execResult.output,
+          execResult.background,
+          execResult.message,
         );
 
         await promptWithAbort(

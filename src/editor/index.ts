@@ -1,12 +1,9 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { EDITOR_SYSTEM_PROMPT } from 'engine/subagent';
 import { extractToolContext, runSubagent } from '../utils/session';
 
-const EDITOR_SYSTEM_PROMPT =
-  'You are a code editing assistant. Given a task description, implement the necessary code changes in the workspace. ' +
-  'You can read files, edit files, write new files, and run commands via runner. ' +
-  'IMPORTANT: You must only statically verify code correctness by reading and reasoning — never actually run, execute, or test any code. ' +
-  'When done, describe what you changed and why.';
+export { EDITOR_SYSTEM_PROMPT };
 
 export function createEditorTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;

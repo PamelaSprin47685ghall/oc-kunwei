@@ -1,21 +1,14 @@
 import type { ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 
-import { OLLAMA_API_KEY } from './key';
+import {
+  formatFetchResponse,
+  formatSearchResults,
+  ollamaPost,
+  validateFetchUrl,
+} from 'engine/ollama';
 
-function validateUrl(url: string): string | undefined {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return `Unsupported protocol: ${parsed.protocol}. Only http: and https: are allowed.`;
-    }
-    return undefined;
-  } catch {
-    return `Invalid URL: ${url}`;
-  }
-}
-
-const OLLAMA_API_BASE = 'https://ollama.com/api';
+const validateUrl = validateFetchUrl;
 
 export function createOllamaWebSearchTool(): ToolDefinition {
   return tool({
@@ -48,31 +41,16 @@ export function createOllamaWebSearchTool(): ToolDefinition {
       context: { abort: AbortSignal },
     ) => {
       try {
-        const response = await fetch(`${OLLAMA_API_BASE}/web_search`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${OLLAMA_API_KEY}`,
-          },
-          body: JSON.stringify({
+        const data = (await ollamaPost(
+          '/web_search',
+          {
             query: args.query,
             max_results: args.numResults ?? 10,
-          }),
-          signal: context.abort,
-        });
-
-        if (!response.ok) {
-          const body = await response.text().catch(() => '');
-          return `Ollama API error (${response.status}): ${body || response.statusText}`;
-        }
-
-        const data = (await response.json()) as Record<string, unknown>;
-        const results = (data.results as unknown[]) ?? [];
-        return JSON.stringify(
-          { success: true, results, query: args.query },
-          null,
-          2,
-        );
+          },
+          context.abort,
+        )) as { results?: Array<{ title: string; url: string; content: string }> };
+        const results = data.results ?? [];
+        return formatSearchResults(results) || 'No results found.';
       } catch (error) {
         if (context.abort.aborted) {
           return 'Request was cancelled';
@@ -122,46 +100,28 @@ export function createOllamaWebFetchTool(): ToolDefinition {
       },
       context: { abort: AbortSignal },
     ) => {
-      const validationError = validateUrl(args.url);
+      const validationError = await validateUrl(args.url);
       if (validationError) return validationError;
 
       try {
-        const response = await fetch(`${OLLAMA_API_BASE}/web_fetch`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${OLLAMA_API_KEY}`,
-          },
-          body: JSON.stringify({
+        const data = (await ollamaPost(
+          '/web_fetch',
+          {
             url: args.url,
             extract_main: args.extract_main ?? true,
             prefer_llms_txt: args.prefer_llms_txt ?? 'auto',
             prompt: args.prompt,
             timeout: args.timeout,
-          }),
-          signal: context.abort,
-        });
+          },
+          context.abort,
+        )) as {
+          title?: string;
+          byline?: string;
+          length?: number;
+          content?: string;
+        };
 
-        if (!response.ok) {
-          const body = await response.text().catch(() => '');
-          return `Ollama API error (${response.status}): ${body || response.statusText}`;
-        }
-
-        const data = (await response.json()) as Record<string, unknown>;
-        const title = (data.title as string) ?? '';
-        const content = (data.content as string) ?? '';
-        const byline = (data.byline as string) ?? '';
-        const length = typeof data.length === 'number' ? data.length : 0;
-
-        return [
-          `Title: ${title}`,
-          byline ? `By: ${byline}` : null,
-          `Length: ${length}`,
-          '',
-          content,
-        ]
-          .filter(Boolean)
-          .join('\n');
+        return formatFetchResponse(data);
       } catch (error) {
         if (context.abort.aborted) {
           return 'Request was cancelled';

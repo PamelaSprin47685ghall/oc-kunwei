@@ -12,9 +12,15 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { stripHeadTailPipes } from './no-head-tail.js';
+import { join } from 'node:path';
+import {
+  createJavascriptPrelude,
+  killTree,
+  resolveJavascriptSpecifier,
+  rewriteJavascriptModuleSpecifiers,
+  runChildProcess,
+  stripHeadTailPipes,
+} from 'engine/runner';
 
 export type RunnerLanguage = 'shell' | 'python' | 'javascript';
 
@@ -62,23 +68,6 @@ function getRunnerTempScriptPath(
 ): string {
   const dir = getRunnerProjectDir(sessionId);
   return join(dir, `script.${extension}`);
-}
-
-function killTree(childProcess: ChildProcess | null): void {
-  if (!childProcess) return;
-  const pid = childProcess.pid;
-  if (!pid) return;
-  try {
-    if (process.platform === 'win32') {
-      spawn('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
-    } else {
-      spawn('kill', ['-9', `-${pid}`], { stdio: 'ignore' });
-    }
-  } catch {
-    try {
-      childProcess.kill('SIGKILL');
-    } catch {}
-  }
 }
 
 function cleanupSingleJob(job: ActiveJob): void {
@@ -149,99 +138,11 @@ function createTempJavascriptScript(
   return scriptPath;
 }
 
-export function createJavascriptPrelude(cwd: string): string {
-  return [
-    'import { createRequire } from "node:module";',
-    `const require = createRequire(${JSON.stringify(join(cwd, '__runner__.cjs'))});`,
-    `const __dirname = ${JSON.stringify(cwd)};`,
-    `const __filename = ${JSON.stringify(join(cwd, '__runner__.mjs'))};`,
-    '',
-  ].join('\n');
-}
-
-export function resolveJavascriptSpecifier(
-  cwd: string,
-  specifier: string,
-): string {
-  const match = /^(\.{1,2}(?:\/[^?#]*)?)([?#].*)?$/.exec(specifier);
-  if (!match) return specifier;
-  return `${pathToFileURL(resolve(cwd, match[1])).href}${match[2] || ''}`;
-}
-
-export function rewriteJavascriptModuleSpecifiers(
-  program: string,
-  cwd: string,
-): string {
-  return program
-    .replace(
-      /\b(from\s*['"])(\.{1,2}\/[^'"]*)(['"])/g,
-      (_match, prefix, specifier, suffix) =>
-        `${prefix}${resolveJavascriptSpecifier(cwd, specifier)}${suffix}`,
-    )
-    .replace(
-      /\b(export\s+\*\s+from\s*['"])(\.{1,2}\/[^'"]*)(['"])/g,
-      (_match, prefix, specifier, suffix) =>
-        `${prefix}${resolveJavascriptSpecifier(cwd, specifier)}${suffix}`,
-    )
-    .replace(
-      /\b(import\s*\(\s*['"])(\.{1,2}\/[^'"]*)(['"]\s*\))/g,
-      (_match, prefix, specifier, suffix) =>
-        `${prefix}${resolveJavascriptSpecifier(cwd, specifier)}${suffix}`,
-    );
-}
-
-interface ChildProcessOptions {
-  command: string;
-  args: string[];
-  cwd: string;
-  env?: Record<string, string | undefined>;
-  signal?: AbortSignal;
-}
-
-function runChildProcess(
-  options: ChildProcessOptions,
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn(options.command, options.args, {
-      cwd: options.cwd,
-      env: { ...process.env, ...(options.env ?? {}) },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: process.platform !== 'win32',
-      windowsHide: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    childProcess.stdout?.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    childProcess.stderr?.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    const onAbort = () => killTree(childProcess);
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-
-    childProcess.on('error', (error) => {
-      options.signal?.removeEventListener('abort', onAbort);
-      reject(error);
-    });
-    childProcess.on('close', (code) => {
-      options.signal?.removeEventListener('abort', onAbort);
-      if (code === 0) {
-        resolve({ stdout, stderr });
-        return;
-      }
-      reject(
-        new Error(
-          `${stdout}${stderr}`.trim() ||
-            `${options.command} exited with code ${code}`,
-        ),
-      );
-    });
-  });
-}
+export {
+  createJavascriptPrelude,
+  resolveJavascriptSpecifier,
+  rewriteJavascriptModuleSpecifiers,
+};
 
 interface PackageJson {
   type?: string;
@@ -458,7 +359,7 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
     finalOutput: '',
   };
   if (language === 'javascript') {
-    job.projectDir = getRunnerProjectDir(); // Unified project dir
+    job.projectDir = getRunnerProjectDir();
   } else if (language === 'python') {
     job.projectDir = getRunnerProjectDir(sessionId);
   }

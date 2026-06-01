@@ -2,8 +2,25 @@ import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
 import {
   createAbortSuppressor,
+  isAbortError,
   isAbortErrorName,
-} from '../utils/abort-suppress';
+} from 'engine/util';
+import {
+  LOOP_NUDGE_PROMPT,
+  REVIEW_INSTRUCTIONS,
+  REVIEWER_NUDGE_PROMPT,
+  type ReviewResult,
+  activateReview,
+  addChild,
+  clearReviewSessions,
+  deactivateReview,
+  getReviewTask,
+  isReviewActive,
+  resolvePendingReview,
+  setPendingReview,
+  tryLockReview,
+  unlockReview,
+} from 'engine/review';
 import {
   asMessageArray,
   asTodoArray,
@@ -14,48 +31,10 @@ import {
 
 const COMMAND_NAME = 'loop';
 
-const REVIEW_CRITERIA = `# Evaluation Criteria
-
-1. Does the implementation make full use of language features? Are the correct algorithms and data structures used?
-2. Is the implementation no more complex than necessary? If the implementation complexity exceeds the Kolmogorov complexity of the problem — if there is a simpler way to express the same logic with fewer moving parts, fewer abstractions, fewer lines — you must propose it. Every line of code is a liability. Prefer the simplest correct solution.
-3. Is the program structure elegant — higher-order functions, no redundancy, clear separation of concerns?
-4. Are there no oversized files, overly long functions, ball-of-mud architecture, or spaghetti code?
-5. Are there necessary unit tests? Are integration tests needed?
-6. Are there design flaws, mathematical errors, logical contradictions, architecture issues, or violations of best practices?
-7. From the user/caller perspective: can they use it naturally? Is the API intuitive? Is it elegant?
-8. Does it fully satisfy the requirements? Is it cutting corners? Is it using "good enough for now" as an excuse to avoid work?`;
-
-const REVIEW_INSTRUCTIONS = `You are a code reviewer performing a rigorous review of submitted work.
-
-${REVIEW_CRITERIA}
-
-Based on the original task, change report, and affected files above, read and inspect the actual file contents before making your judgment. The original task is the authoritative requirement — verify that the implementation satisfies it, not just that it matches the self-reported change report.
-
-# Submitting Your Verdict
-
-submit_review_result({ "feedback": null })          // Accept — pass with no feedback
-submit_review_result({ "feedback": "specific..." }) // Reject — provide detailed, actionable feedback
-
-IMPORTANT: If you accept, feedback MUST be null. Do not write praise or any other text — it will be misinterpreted as rejection feedback.
-
-You MUST call submit_review_result before finishing. Do not end the conversation without submitting your verdict.`;
-
-const REVIEWER_NUDGE_PROMPT =
-  'You have not submitted your review verdict yet.\n\n' +
-  'You must call submit_review_result to submit your verdict:\n' +
-  '  submit_review_result({ "feedback": null })          // Accept\n' +
-  '  submit_review_result({ "feedback": "details..." })  // Reject\n\n' +
-  'Do not explain what you plan to do — call the tool immediately.';
-
 const MAX_REVIEWER_NUDGES = 3;
 
 const REVIEWER_GRACE_MS = 1500;
 const GRACE_TIMEOUT = Symbol('grace_timeout');
-
-const NUDGE_PROMPT =
-  'You are in loop mode. You must call the submit_review tool to\n' +
-  'submit your detailed report and list of modified files for review\n' +
-  'before finishing. Do not end the conversation without calling submit_review.';
 
 const SUPPRESS_AFTER_ABORT_MS = 5_000;
 
@@ -75,124 +54,49 @@ class Deferred<T> {
   }
 }
 
-interface ReviewResult {
-  feedback: string | null;
-  terminated?: boolean;
-}
-
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-
-interface ReviewEntry {
-  active: boolean;
-  originalTask?: string;
-  locked: boolean;
-  createdAt: number;
-  pendingResult?: Deferred<ReviewResult>;
-}
-
 class ReviewSessionManager {
-  private sessions = new Map<string, ReviewEntry>();
-  private children = new Map<string, Set<string>>();
-
   activate(sessionID: string, task: string): void {
-    this.evictStale();
-    this.sessions.set(sessionID, {
-      active: true,
-      originalTask: task,
-      locked: false,
-      createdAt: Date.now(),
-    });
+    activateReview(sessionID, task);
   }
 
   addChild(parentID: string, childID: string): void {
-    if (!parentID || !childID) return;
-    const set = this.children.get(parentID);
-    if (set) set.add(childID);
-    else this.children.set(parentID, new Set([childID]));
-  }
-
-  cascadeDelete(sessionID: string): void {
-    const childIDs = this.children.get(sessionID);
-    if (childIDs) {
-      for (const childID of childIDs) {
-        const entry = this.sessions.get(childID);
-        entry?.pendingResult?.resolve({
-          feedback: 'Parent session closed.',
-          terminated: true,
-        });
-        this.sessions.delete(childID);
-      }
-      this.children.delete(sessionID);
-    }
-    this.sessions.delete(sessionID);
+    addChild(parentID, childID);
   }
 
   deactivate(sessionID: string): void {
-    this.evictStale();
-    this.cascadeDelete(sessionID);
+    deactivateReview(sessionID);
   }
 
   isActive(sessionID: string): boolean {
-    return this.sessions.get(sessionID)?.active === true;
+    return isReviewActive(sessionID);
   }
 
   unlock(sessionID: string): void {
-    const entry = this.sessions.get(sessionID);
-    if (entry) entry.locked = false;
+    unlockReview(sessionID);
   }
 
   tryLock(sessionID: string): boolean {
-    const entry = this.sessions.get(sessionID);
-    if (!entry || entry.locked) return false;
-    entry.locked = true;
-    return true;
+    return tryLockReview(sessionID);
   }
 
   setPending(sessionID: string, deferred: Deferred<ReviewResult>): void {
-    this.evictStale();
-    const entry = this.sessions.get(sessionID);
-    if (entry) {
-      entry.pendingResult = deferred;
-    } else {
-      this.sessions.set(sessionID, {
-        active: false,
-        locked: false,
-        createdAt: Date.now(),
-        pendingResult: deferred,
-      });
-    }
+    setPendingReview(sessionID, (result) => deferred.resolve(result));
   }
 
   resolvePending(sessionID: string, result: ReviewResult): boolean {
-    this.evictStale();
-    const entry = this.sessions.get(sessionID);
-    if (!entry?.pendingResult) return false;
-    entry.pendingResult.resolve(result);
-    entry.pendingResult = undefined;
-    return true;
+    return resolvePendingReview(sessionID, result);
   }
 
   getTask(sessionID: string): string | undefined {
-    return this.sessions.get(sessionID)?.originalTask;
+    return getReviewTask(sessionID);
   }
 
   delete(sessionID: string): void {
-    this.cascadeDelete(sessionID);
+    deactivateReview(sessionID);
   }
 
   clear(): void {
-    this.sessions.clear();
-    this.children.clear();
-  }
-
-  private evictStale(): void {
-    const cutoff = Date.now() - SESSION_TTL_MS;
-    for (const [key, entry] of this.sessions) {
-      if (entry.createdAt < cutoff) {
-        entry.pendingResult?.resolve({ feedback: 'Session expired' });
-        this.sessions.delete(key);
-      }
-    }
+    clearReviewSessions();
   }
 }
 
@@ -359,8 +263,7 @@ async function runReviewerWithNudge(
 
     if (result.type === 'error') {
       reviewSessions.delete(childID);
-      const errName = (result.error as { name?: string })?.name;
-      if (isAbortErrorName(errName)) {
+      if (isAbortError(result.error)) {
         return { feedback: 'Review aborted.', terminated: true };
       }
       return {
@@ -552,7 +455,7 @@ export function createLoopNudgeHook(ctx: PluginInput) {
         try {
           await ctx.client.session.prompt({
             path: { id: sessionID },
-            body: { parts: [{ type: 'text', text: NUDGE_PROMPT }] },
+            body: { parts: [{ type: 'text', text: LOOP_NUDGE_PROMPT }] },
           });
         } catch {
           // best-effort

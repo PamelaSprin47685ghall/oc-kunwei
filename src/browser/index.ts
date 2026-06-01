@@ -1,12 +1,9 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { BROWSER_SYSTEM_PROMPT } from 'engine/subagent';
 import { extractToolContext, runSubagent } from '../utils/session.js';
 
-const BROWSER_SYSTEM_PROMPT =
-  'You are a browser automation agent. Given a natural-language intent describing a web task, use stealth-browser-mcp tools to interact with web pages. ' +
-  'You can navigate to URLs, query DOM elements, click elements, type text, extract page content, take screenshots, manage cookies, and handle network requests. ' +
-  'If screenshots are saved to files, you can use the read tool to inspect them. ' +
-  'Execute the task step by step and return the results clearly.';
+export { BROWSER_SYSTEM_PROMPT };
 
 export function createBrowserTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;

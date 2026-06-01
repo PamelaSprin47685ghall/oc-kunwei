@@ -26,7 +26,7 @@ describe('createOllamaWebFetchTool', () => {
       { url: 'not-a-url' },
       { abort: new AbortController().signal },
     );
-    expect(result).toBe('Invalid URL: not-a-url');
+    expect(result).toBe('invalid URL');
   });
 
   test('rejects unsupported protocol', async () => {
@@ -35,9 +35,7 @@ describe('createOllamaWebFetchTool', () => {
       { url: 'file:///etc/passwd' },
       { abort: new AbortController().signal },
     );
-    expect(result).toBe(
-      'Unsupported protocol: file:. Only http: and https: are allowed.',
-    );
+    expect(result).toBe('unsupported URL scheme: file:');
   });
 
   test('rejects ftp protocol', async () => {
@@ -46,9 +44,7 @@ describe('createOllamaWebFetchTool', () => {
       { url: 'ftp://example.com/file' },
       { abort: new AbortController().signal },
     );
-    expect(result).toBe(
-      'Unsupported protocol: ftp:. Only http: and https: are allowed.',
-    );
+    expect(result).toBe('unsupported URL scheme: ftp:');
   });
 
   test('accepts valid https URL and calls API', async () => {
@@ -157,10 +153,9 @@ describe('createOllamaWebSearchTool', () => {
       { abort: new AbortController().signal },
     );
 
-    const parsed = JSON.parse(result);
-    expect(parsed.success).toBe(true);
-    expect(parsed.results).toHaveLength(2);
-    expect(parsed.query).toBe('test search');
+    expect(result).toContain('Result 1');
+    expect(result).toContain('Result 2');
+    expect(result).toContain('https://example.com/1');
   });
 
   test('handles API error', async () => {

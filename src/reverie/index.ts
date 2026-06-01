@@ -2,15 +2,12 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { REVERIE_SYSTEM_PROMPT } from 'engine/subagent';
 import { extractToolContext, runSubagent } from '../utils/session';
 
+export { REVERIE_SYSTEM_PROMPT };
+
 const MAX_REVERIE_FILE_BYTES = 1_048_576;
-const REVERIE_SYSTEM_PROMPT =
-  'You are in a quiet room with the texts and the question.\n' +
-  'No tools, no distractions — just you and the problem.\n' +
-  '\n' +
-  'Read carefully. Turn it over in your mind.\n' +
-  'When you are ready, answer with clarity and depth.';
 
 function isWithinDirectory(child: string, parent: string): boolean {
   const rel = path.relative(parent, child);

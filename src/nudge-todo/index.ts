@@ -1,14 +1,8 @@
 import type { PluginInput } from '@opencode-ai/plugin';
-import {
-  createAbortSuppressor,
-  isAbortErrorName,
-} from '../utils/abort-suppress';
+import { createAbortSuppressor, isAbortErrorName } from 'engine/util';
+import { hasOpenTodos, TODO_NUDGE_CHECK_TAG, TODO_NUDGE_PROMPT, wasTagSkipped } from 'engine/todo';
 import { asMessageArray, asTodoArray } from '../utils/session';
 
-const NUDGE_PROMPT =
-  'There are still incomplete todos. Continue working through the remaining items. If stuck or blocked, explain the situation and ask for guidance. If you want to skip this check, respond with <skip-todo-check />';
-
-const TERMINAL_STATUSES = ['completed', 'cancelled'];
 const SUPPRESS_AFTER_ABORT_MS = 5_000;
 
 export function createNudgeTodoHook(ctx: PluginInput) {
@@ -36,8 +30,7 @@ export function createNudgeTodoHook(ctx: PluginInput) {
           return;
         }
 
-        const open = todos.filter((t) => !TERMINAL_STATUSES.includes(t.status));
-        if (open.length === 0) return;
+        if (!hasOpenTodos(todos)) return;
 
         try {
           const messagesResult = await ctx.client.session.messages({
@@ -52,7 +45,7 @@ export function createNudgeTodoHook(ctx: PluginInput) {
               .filter((p) => p.type === 'text' && p.text)
               .map((p) => p.text ?? '')
               .join('');
-            if (fullText.includes('<skip-todo-check />')) return;
+            if (wasTagSkipped(fullText, TODO_NUDGE_CHECK_TAG)) return;
           }
         } catch {
           // best-effort
@@ -61,7 +54,7 @@ export function createNudgeTodoHook(ctx: PluginInput) {
         try {
           await ctx.client.session.prompt({
             path: { id: sessionID },
-            body: { parts: [{ type: 'text', text: NUDGE_PROMPT }] },
+            body: { parts: [{ type: 'text', text: TODO_NUDGE_PROMPT }] },
           });
         } catch {
           // best-effort

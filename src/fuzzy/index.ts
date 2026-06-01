@@ -3,27 +3,22 @@ import path from 'node:path';
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { GrepCursor, GrepMode } from '@ff-labs/fff-node';
 
-import { FinderManager } from './finder';
 import {
+  buildQuery,
   consumeIterator,
+  createExternalFinder,
+  FinderManager,
+  fileAnnotation,
   formatFindOutput,
   formatGrepOutput,
+  resolveExternalBasePath,
   storeIterator,
-} from './format';
-import { buildQuery } from './query';
+  truncateLine,
+} from 'engine/fuzzy';
+
+export { resolveExternalBasePath };
 
 const z = tool.schema;
-
-type FffModule = typeof import('@ff-labs/fff-node');
-
-async function loadFff(basePath: string) {
-  const fff = (await import('@ff-labs/fff-node')) as FffModule;
-  const result = fff.FileFinder.create({ basePath, aiMode: true });
-  if (!result.ok) {
-    throw new Error(`Failed to create FFF file finder: ${result.error}`);
-  }
-  return result.value;
-}
 
 interface FuzzyFindIteratorState {
   query: string;
@@ -41,34 +36,6 @@ interface FuzzyGrepIteratorState {
   pageSize: number;
   externalBasePath: string | null;
   cursor: GrepCursor | null;
-}
-
-export function resolveExternalBasePath(absPath: string): {
-  basePath: string;
-  pathConstraint: string | null;
-} {
-  const normalized = path.resolve(absPath);
-  const lastSegment = normalized.split(path.sep).pop() ?? '';
-  if (
-    lastSegment.startsWith('.') ||
-    /\.[a-zA-Z][a-zA-Z0-9]{0,9}$/.test(lastSegment)
-  ) {
-    return {
-      basePath: path.dirname(normalized),
-      pathConstraint: lastSegment,
-    };
-  }
-  return { basePath: normalized, pathConstraint: null };
-}
-
-async function createExternalFinder(basePath: string) {
-  const finder = await loadFff(basePath);
-  try {
-    await finder.waitForScan(15000);
-  } catch {
-    // scan timeout is non-fatal
-  }
-  return finder;
 }
 
 // -- Fuzzy find tool --

@@ -276,6 +276,9 @@ function applyUniversalPermissionDeny(
     if (permission.fuzzy_grep === undefined) permission.fuzzy_grep = 'deny';
   }
   if (permission.grep === undefined) permission.grep = 'deny';
+  if (agent !== 'orchestrator' && permission.question === undefined) {
+    permission.question = 'deny';
+  }
 }
 
 const KNOWN_AGENT_NAMES: AgentName[] = [

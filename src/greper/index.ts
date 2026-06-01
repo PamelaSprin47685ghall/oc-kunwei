@@ -1,15 +1,9 @@
 import type { PluginInput, ToolDefinition } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin/tool';
+import { GREPER_SYSTEM_PROMPT } from 'engine/subagent';
 import { extractToolContext, runSubagent } from '../utils/session';
 
-const GREPER_SYSTEM_PROMPT =
-  'You are a code exploration agent. Given a search query, explore the codebase to find relevant code in the workspace. ' +
-  'Use the `fuzzy_find` tool for fuzzy file discovery and the built-in `glob` tool when you need strict path-pattern filtering. ' +
-  'Use the `fuzzy_grep` tool to search file contents for keywords, patterns, or code snippets. ' +
-  'After locating relevant files, use the `read` tool to read their contents. ' +
-  'Provide a detailed summary of what you found, including file paths and key code sections. ' +
-  'You have access to runner for read-only exploration commands (e.g., listing files, checking git status). ' +
-  'Do NOT use runner to modify files — if you need to make changes, stop and report back.';
+export { GREPER_SYSTEM_PROMPT };
 
 export function createGreperTool(ctx: PluginInput): ToolDefinition {
   const client = ctx.client;

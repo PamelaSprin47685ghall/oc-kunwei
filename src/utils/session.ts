@@ -1,11 +1,8 @@
 import type { PluginInput } from '@opencode-ai/plugin';
-import { isAbortErrorName } from './abort-suppress';
+import { isAbortError } from 'engine/util';
+import { readAssistantText, type Entry } from 'engine/session';
 
-export function isAbortError(error: unknown): boolean {
-  if (error instanceof DOMException) return isAbortErrorName(error.name);
-  if (error instanceof Error) return isAbortErrorName(error.name);
-  return false;
-}
+export { isAbortError };
 
 export async function extractSessionText(
   client: PluginInput['client'],
@@ -17,14 +14,14 @@ export async function extractSessionText(
     ...(directory ? { query: { directory } } : {}),
   });
   const messages = asMessageArray(result.data);
-  const texts: string[] = [];
-  for (const m of messages) {
-    if (m.info?.role !== 'assistant') continue;
-    for (const p of m.parts ?? []) {
-      if (p.type === 'text' && p.text) texts.push(p.text);
-    }
-  }
-  return texts.join('\n\n');
+  const entries: Entry[] = messages.map((m) => ({
+    type: 'message',
+    message: {
+      role: m.info?.role,
+      content: (m.parts ?? []) as Array<{ type?: string; text?: string }>,
+    },
+  }));
+  return readAssistantText(entries) ?? '';
 }
 
 /**
