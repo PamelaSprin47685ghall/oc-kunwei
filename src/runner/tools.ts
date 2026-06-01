@@ -5,9 +5,9 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
-  readFileSync,
   rmSync,
   unlinkSync,
+  type WriteStream,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,6 +28,8 @@ export interface ActiveJob {
   status: 'running' | 'completed' | 'aborted';
   startTime: number;
   closePromise: Promise<void>;
+  writeStream: WriteStream | null;
+  finalOutput: string;
 }
 
 const activeJobs = new Map<string, ActiveJob>();
@@ -41,16 +43,18 @@ function getRunnerLogPath(sessionId: string): string {
 }
 
 function getRunnerProjectDir(sessionId: string): string {
-  mkdirSync(RUNNER_LOG_DIR, { recursive: true });
-  return join(RUNNER_LOG_DIR, `runner-${sessionId}`);
+  const dir = join(RUNNER_LOG_DIR, `runner-${sessionId}`);
+  mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 function getRunnerTempScriptPath(
-  cwd: string,
+  _cwd: string,
   sessionId: string,
   extension: string,
 ): string {
-  return join(cwd, `.runner-${sessionId}.${extension}`);
+  const dir = getRunnerProjectDir(sessionId);
+  return join(dir, `script.${extension}`);
 }
 
 function killTree(childProcess: ChildProcess | null): void {
@@ -83,14 +87,13 @@ export function cleanupJob(sessionId: string): void {
   }
 
   try {
+    job.writeStream?.end();
+  } catch {}
+  job.writeStream = null;
+
+  try {
     if (existsSync(job.stdoutFile)) unlinkSync(job.stdoutFile);
   } catch {}
-
-  if (job.tempPath && existsSync(job.tempPath)) {
-    try {
-      unlinkSync(job.tempPath);
-    } catch {}
-  }
 
   if (job.projectDir && existsSync(job.projectDir)) {
     try {
@@ -399,6 +402,8 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
     status: 'running',
     startTime: Date.now(),
     closePromise: Promise.resolve(),
+    writeStream,
+    finalOutput: '',
   };
   if (language === 'javascript' || language === 'python') {
     job.projectDir = getRunnerProjectDir(sessionId);
@@ -411,7 +416,10 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
     },
     abortSignal: job.abortController.signal,
     onOutput: (chunk) => {
-      writeStream.write(chunk);
+      job.finalOutput += chunk;
+      try {
+        writeStream.write(chunk);
+      } catch {}
     },
   };
 
@@ -441,18 +449,20 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
         job.status = result.cancelled ? 'aborted' : 'completed';
       }
       if (result.exitCode !== undefined && result.exitCode !== 0) {
-        writeStream.write(
-          `\n[runner] Command exited with code ${result.exitCode}\n`,
-        );
+        const msg = `\n[runner] Command exited with code ${result.exitCode}\n`;
+        job.finalOutput += msg;
+        try {
+          writeStream.write(msg);
+        } catch {}
       }
     } catch (error) {
       if (job.status === 'running') job.status = 'aborted';
-      writeStream.write(
-        `\n[runner] ${error instanceof Error ? error.message : String(error)}\n`,
-      );
+      const msg = `\n[runner] ${error instanceof Error ? error.message : String(error)}\n`;
+      job.finalOutput += msg;
+      try {
+        writeStream.write(msg);
+      } catch {}
       capturedError = error;
-    } finally {
-      writeStream.end();
     }
   })();
 
@@ -467,13 +477,11 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
     ]);
 
     if (isCompletedEarly) {
+      const fullOutput = job.finalOutput;
       if (capturedError) {
         cleanupJob(sessionId);
         throw capturedError;
       }
-      const fullOutput = existsSync(logPath)
-        ? readFileSync(logPath, 'utf-8')
-        : '';
       cleanupJob(sessionId);
       return {
         output: fullOutput.trim() || '(no output)',
@@ -504,13 +512,10 @@ export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
     throw error;
   }
 
-  const partialOutput = existsSync(logPath)
-    ? readFileSync(logPath, 'utf-8')
-    : '';
-  job.bytesRead = partialOutput.length;
+  job.bytesRead = job.finalOutput.length;
 
   return {
-    output: partialOutput.trim() || '(no output yet)',
+    output: job.finalOutput.trim() || '(no output yet)',
     background: true,
     jobId: sessionId,
     message:
@@ -536,23 +541,25 @@ export async function wait(options: WaitOptions): Promise<WaitResult> {
 
   const job = activeJobs.get(sessionId);
   if (!job) {
-    throw new Error(
-      'No active job found. Use execute() to start a task first.',
-    );
+    return {
+      output: '',
+      completed: true,
+      message:
+        '[System] No active job — it has already finished or was cleaned up.',
+    };
   }
 
   if (job.status === 'completed' || job.status === 'aborted') {
-    const fullOutput = readFileSync(job.stdoutFile, 'utf-8');
-    const result: WaitResult = {
-      output: fullOutput.substring(job.bytesRead).trim(),
+    const newOutput = job.finalOutput.substring(job.bytesRead).trim();
+    cleanupJob(sessionId);
+    return {
+      output: newOutput,
       completed: true,
       message:
         job.status === 'completed'
           ? '[System] Task has completed.'
           : '[System] Task was aborted.',
     };
-    cleanupJob(sessionId);
-    return result;
   }
 
   await Promise.race([
@@ -560,9 +567,8 @@ export async function wait(options: WaitOptions): Promise<WaitResult> {
     new Promise<void>((resolve) => setTimeout(resolve, ms)),
   ]);
 
-  const fullOutput = readFileSync(job.stdoutFile, 'utf-8');
-  const newOutput = fullOutput.substring(job.bytesRead).trim();
-  job.bytesRead = fullOutput.length;
+  const newOutput = job.finalOutput.substring(job.bytesRead).trim();
+  job.bytesRead = job.finalOutput.length;
 
   if (job.status !== 'running') {
     cleanupJob(sessionId);

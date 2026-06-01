@@ -14,11 +14,16 @@ import { buildQuery } from './query';
 
 const z = tool.schema;
 
-// Lazy loader - avoids CJS require() of ESM-only package (@ff-labs/fff-node has no "require" export)
-// Uses Function constructor so TypeScript CJS compilation doesn't transform import() to require()
-const fffImport = new Function('spec', 'return import(spec)') as (
-  spec: string,
-) => Promise<typeof import('@ff-labs/fff-node')>;
+type FffModule = typeof import('@ff-labs/fff-node');
+
+async function loadFff(basePath: string) {
+  const fff = (await import('@ff-labs/fff-node')) as FffModule;
+  const result = fff.FileFinder.create({ basePath, aiMode: true });
+  if (!result.ok) {
+    throw new Error(`Failed to create FFF file finder: ${result.error}`);
+  }
+  return result.value;
+}
 
 interface FuzzyFindIteratorState {
   query: string;
@@ -57,12 +62,7 @@ export function resolveExternalBasePath(absPath: string): {
 }
 
 async function createExternalFinder(basePath: string) {
-  const { FileFinder } = await fffImport('@ff-labs/fff-node');
-  const result = FileFinder.create({ basePath, aiMode: true });
-  if (!result.ok) {
-    throw new Error(`Failed to create FFF file finder: ${result.error}`);
-  }
-  const finder = result.value;
+  const finder = await loadFff(basePath);
   try {
     await finder.waitForScan(15000);
   } catch {

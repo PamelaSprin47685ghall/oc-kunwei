@@ -1,5 +1,7 @@
 import type { Plugin } from '@opencode-ai/plugin';
+import { createBrowserTool, getBrowserConfig } from './browser/index.js';
 import { createEditorTool, getEditorConfig } from './editor/index.js';
+import { createFuzzyFindTool, createFuzzyGrepTool } from './fuzzy/index.js';
 import { createGreperTool, getGreperConfig } from './greper/index.js';
 import { createCapitalsContextHook } from './inject-caps/index.js';
 import {
@@ -9,35 +11,34 @@ import {
   createSubmitReviewTool,
   getReviewerConfig,
 } from './loop/index.js';
+import { getMcpConfig } from './mcp/index.js';
 import { createNudgeTodoHook } from './nudge-todo/index.js';
-import {
-  createFuzzyFindTool,
-  createFuzzyGrepTool,
-} from './fuzzy/index.js';
 import {
   createOllamaWebFetchTool,
   createOllamaWebSearchTool,
 } from './ollama-web/index.js';
+import { createReverieTool, getReverieConfig } from './reverie/index.js';
 import {
-  createRunnerTool,
-  getRunnerConfig,
-  createRunnerWaitTool,
   createRunnerAbortTool,
+  createRunnerTool,
+  createRunnerWaitTool,
+  getRunnerConfig,
 } from './runner/index.js';
 import { createRunnerNudgeHook } from './runner/nudge.js';
-import { createReverieTool, getReverieConfig } from './reverie/index.js';
-import { getMcpConfig } from './mcp/index.js';
-import { createBrowserTool, getBrowserConfig } from './browser/index.js';
 import { createSyntaxCheckHook } from './tree-sitter/index.js';
 
-const { agents: editorAgents } = getEditorConfig();
-const { agents: runnerAgents } = getRunnerConfig();
-const { agents: browserAgents } = getBrowserConfig();
-const { agents: reverieAgents } = getReverieConfig();
-const { agents: reviewerAgents } = getReviewerConfig();
-const { agents: greperAgents } = getGreperConfig();
+type AgentName =
+  | 'orchestrator'
+  | 'editor'
+  | 'reviewer'
+  | 'greper'
+  | 'browser'
+  | 'runner'
+  | 'reverie';
 
-const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
+type ToolDefaults = Record<string, boolean>;
+
+const AGENT_TOOL_DEFAULTS: Record<AgentName, ToolDefaults> = {
   orchestrator: {
     read: true,
     editor: true,
@@ -48,17 +49,17 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     websearch: true,
     runner: true,
     browser: true,
+    glob: true,
+    'stealth_browser_mcp_*': false,
+    fuzzy_find: false,
+    fuzzy_grep: false,
+    grep: false,
+    edit: false,
+    write: false,
+    task: false,
     runner_wait: false,
     runner_abort: false,
     submit_review_result: false,
-    edit: false,
-    write: false,
-    glob: true,
-    grep: false,
-    fuzzy_find: true,
-    fuzzy_grep: true,
-    task: false,
-    'stealth_browser_mcp_*': false,
   },
   editor: {
     read: true,
@@ -66,9 +67,9 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     edit: true,
     runner: true,
     glob: true,
-    grep: false,
     fuzzy_find: true,
     fuzzy_grep: true,
+    grep: false,
     editor: false,
     greper: false,
     reverie: false,
@@ -108,9 +109,10 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     read: true,
     runner: true,
     glob: true,
-    grep: false,
     fuzzy_find: true,
     fuzzy_grep: true,
+    write: false,
+    edit: false,
     editor: false,
     greper: false,
     reverie: false,
@@ -118,10 +120,9 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
     submit_review_result: false,
     webfetch: false,
     websearch: false,
-    write: false,
-    edit: false,
-    task: false,
     browser: false,
+    grep: false,
+    task: false,
     runner_wait: false,
     runner_abort: false,
     'stealth_browser_mcp_*': false,
@@ -194,6 +195,103 @@ const AGENT_TOOLS_MAP: Record<string, Record<string, boolean>> = {
   },
 };
 
+function getAgentToolDefaults(agent: AgentName): ToolDefaults {
+  return AGENT_TOOL_DEFAULTS[agent];
+}
+
+function mergeTools(
+  current: Record<string, unknown> | undefined,
+  defaults: ToolDefaults,
+): Record<string, boolean> {
+  const merged: Record<string, boolean> = { ...defaults };
+  for (const [key, value] of Object.entries(current ?? {})) {
+    if (typeof value === 'boolean') merged[key] = value;
+  }
+  return merged;
+}
+
+const AGENT_PERMISSION_DEFAULTS: Record<AgentName, Record<string, string>> = {
+  orchestrator: {
+    bash: 'deny',
+    edit: 'deny',
+    write: 'deny',
+    grep: 'deny',
+    'stealth-browser-mcp_*': 'deny',
+    runner_wait: 'deny',
+    runner_abort: 'deny',
+    task: 'deny',
+    glob: 'allow',
+    fuzzy_find: 'deny',
+    fuzzy_grep: 'deny',
+    question: 'allow',
+  },
+  editor: { bash: 'deny', grep: 'deny', task: 'deny' },
+  reviewer: { bash: 'deny', edit: 'deny', write: 'deny', task: 'deny' },
+  greper: {
+    bash: 'deny',
+    edit: 'deny',
+    write: 'deny',
+    grep: 'deny',
+    task: 'deny',
+  },
+  browser: { bash: 'deny', edit: 'deny', write: 'deny', task: 'deny' },
+  runner: { edit: 'deny', write: 'deny', task: 'deny' },
+  reverie: { bash: 'deny', edit: 'deny', write: 'deny', task: 'deny' },
+};
+
+function getAgentPermissionDefaults(agent: AgentName): Record<string, string> {
+  return { ...AGENT_PERMISSION_DEFAULTS[agent] };
+}
+
+function applyUniversalPermissionDeny(
+  agent: AgentName,
+  permission: Record<string, string>,
+): void {
+  if (permission.bash === undefined) permission.bash = 'deny';
+  if (
+    agent !== 'browser' &&
+    permission['stealth-browser-mcp_*'] === undefined
+  ) {
+    permission['stealth-browser-mcp_*'] = 'deny';
+  }
+  if (agent !== 'runner') {
+    if (permission.runner_wait === undefined) permission.runner_wait = 'deny';
+    if (permission.runner_abort === undefined) permission.runner_abort = 'deny';
+  }
+  if (agent !== 'reviewer' && permission.submit_review_result === undefined) {
+    permission.submit_review_result = 'deny';
+  }
+  if (
+    agent !== 'editor' &&
+    agent !== 'greper' &&
+    permission.glob === undefined
+  ) {
+    permission.glob = 'deny';
+  }
+  if (agent === 'editor' || agent === 'greper') {
+    if (permission.fuzzy_find === undefined) permission.fuzzy_find = 'allow';
+    if (permission.fuzzy_grep === undefined) permission.fuzzy_grep = 'allow';
+  } else {
+    if (permission.fuzzy_find === undefined) permission.fuzzy_find = 'deny';
+    if (permission.fuzzy_grep === undefined) permission.fuzzy_grep = 'deny';
+  }
+  if (permission.grep === undefined) permission.grep = 'deny';
+}
+
+const KNOWN_AGENT_NAMES: AgentName[] = [
+  'orchestrator',
+  'editor',
+  'reviewer',
+  'greper',
+  'browser',
+  'runner',
+  'reverie',
+];
+
+function isAgentName(name: string): name is AgentName {
+  return (KNOWN_AGENT_NAMES as string[]).includes(name);
+}
+
 const KunweiPlugin: Plugin = async (ctx) => {
   const mcps = getMcpConfig();
   const capitalsContextHook = createCapitalsContextHook(ctx.directory);
@@ -225,96 +323,75 @@ const KunweiPlugin: Plugin = async (ctx) => {
 
     'chat.message': async (input, output) => {
       const agent = input.agent ?? 'orchestrator';
-      const allowedTools = AGENT_TOOLS_MAP[agent];
-      if (allowedTools) {
-        output.message.tools = {
-          ...output.message.tools,
-          ...allowedTools,
-        };
-      }
+      const defaults = isAgentName(agent) ? getAgentToolDefaults(agent) : null;
+      if (!defaults) return;
+      output.message.tools = mergeTools(output.message.tools, defaults);
     },
 
     config: async (opencodeConfig) => {
       const userAgent = opencodeConfig.agent ?? {};
+
       opencodeConfig.agent = {
         ...userAgent,
-        ...editorAgents,
-        ...runnerAgents,
-        ...reverieAgents,
-        ...reviewerAgents,
-        ...greperAgents,
-        ...browserAgents,
+        ...getEditorConfig().agents,
+        ...getRunnerConfig().agents,
+        ...getReverieConfig().agents,
+        ...getReviewerConfig().agents,
+        ...getGreperConfig().agents,
+        ...getBrowserConfig().agents,
         orchestrator: {
           ...(opencodeConfig.agent?.orchestrator as
             | Record<string, unknown>
             | undefined),
-          tools: {
-            editor: true,
-            greper: true,
-            reverie: true,
-            submit_review: true,
-            webfetch: true,
-            websearch: true,
-            runner: true,
-            browser: true,
-            glob: true,
-            grep: false,
-            fuzzy_find: true,
-            fuzzy_grep: true,
-            submit_review_result: false,
-            runner_wait: false,
-            runner_abort: false,
-          },
+          tools: mergeTools(
+            (
+              opencodeConfig.agent?.orchestrator as
+                | Record<string, unknown>
+                | undefined
+            )?.tools as Record<string, unknown> | undefined,
+            getAgentToolDefaults('orchestrator'),
+          ),
           permission: {
-            edit: 'deny',
-            write: 'deny',
-            glob: 'allow',
-            grep: 'deny',
-            fuzzy_find: 'allow',
-            fuzzy_grep: 'allow',
-            task: 'deny',
-            bash: 'deny',
-            'stealth-browser-mcp_*': 'deny',
-            runner_wait: 'deny',
-            runner_abort: 'deny',
-            question: 'allow',
-            ...((opencodeConfig.agent?.orchestrator as Record<string, unknown> | undefined)
-              ?.permission as Record<string, unknown> | undefined),
+            ...getAgentPermissionDefaults('orchestrator'),
+            ...((
+              opencodeConfig.agent?.orchestrator as
+                | Record<string, unknown>
+                | undefined
+            )?.permission as Record<string, unknown> | undefined),
           },
           mcps: [],
-        } as Record<string, unknown>,
+        },
       };
 
-      for (const name of [
-        'editor',
-        'greper',
-        'runner',
-        'reverie',
-        'reviewer',
-        'browser',
-      ]) {
-        const userEntry = userAgent[name] as
+      const renameMap: Record<string, string> = {
+        editor: 'editor',
+        greper: 'greper',
+        runner: 'runner',
+        reverie: 'reverie',
+        reviewer: 'reviewer',
+        browser: 'browser',
+      };
+      for (const [oldName, newName] of Object.entries(renameMap)) {
+        const userEntry = userAgent[oldName] as
           | Record<string, unknown>
           | undefined;
         if (!userEntry) continue;
         const agentEntry = (opencodeConfig.agent as Record<string, unknown>)[
-          name
+          newName
         ] as Record<string, unknown> | undefined;
-        if (agentEntry) {
-          Object.assign(agentEntry, userEntry);
-        }
+        if (agentEntry) Object.assign(agentEntry, userEntry);
       }
 
       if (userAgent.basher) {
         const runnerEntry = (opencodeConfig.agent as Record<string, unknown>)
           .runner as Record<string, unknown> | undefined;
-        if (runnerEntry) {
-          Object.assign(runnerEntry, userAgent.basher);
-        }
+        if (runnerEntry) Object.assign(runnerEntry, userAgent.basher);
         delete (opencodeConfig.agent as Record<string, unknown>).basher;
       }
 
-      const configMcp = opencodeConfig.mcp as Record<string, unknown> | undefined;
+      const configMcp = opencodeConfig.mcp as
+        | Record<string, unknown>
+        | undefined;
       if (!configMcp) {
         opencodeConfig.mcp = { ...mcps };
       } else {
@@ -324,50 +401,27 @@ const KunweiPlugin: Plugin = async (ctx) => {
       loopCommandManager.registerCommand(opencodeConfig);
 
       const agentConfig = opencodeConfig.agent as Record<string, unknown>;
-      for (const [_name, entry] of Object.entries(agentConfig)) {
+      for (const [name, entry] of Object.entries(agentConfig)) {
         if (typeof entry !== 'object' || !entry) continue;
         const agent = entry as Record<string, unknown>;
-        const perm = ((agent.permission as Record<string, unknown>) ??
-          {}) as Record<string, unknown>;
-        perm.bash = 'deny';
-        if (_name !== 'browser') {
-          perm['stealth-browser-mcp_*'] = 'deny';
-        }
-        if (_name !== 'runner') {
-          perm.runner_wait = 'deny';
-          perm.runner_abort = 'deny';
-        }
-        if (_name !== 'reviewer') {
-          perm.submit_review_result = 'deny';
-        }
-        if (_name !== 'editor' && _name !== 'greper' && _name !== 'orchestrator') {
-          perm.glob = 'deny';
-        }
-        if (_name === 'editor' || _name === 'greper' || _name === 'orchestrator') {
-          perm.fuzzy_find = 'allow';
-          perm.fuzzy_grep = 'allow';
-        } else {
-          perm.fuzzy_find = 'deny';
-          perm.fuzzy_grep = 'deny';
-        }
-        perm.grep = 'deny';
-        if (_name !== 'orchestrator') {
-          const userAgentEntry = userAgent[_name] as Record<string, unknown> | undefined;
-          const userPerm = userAgentEntry?.permission as Record<string, unknown> | undefined;
-          if (!userPerm || !('question' in userPerm)) {
-            perm.question = 'deny';
+        const perm =
+          (agent.permission as Record<string, string> | undefined) ?? {};
+        if (isAgentName(name)) {
+          const defaults = getAgentPermissionDefaults(name);
+          for (const [key, value] of Object.entries(defaults)) {
+            if (perm[key] === undefined) perm[key] = value;
           }
+          applyUniversalPermissionDeny(name, perm);
+        } else {
+          applyUniversalPermissionDeny('runner', perm);
         }
         agent.permission = perm;
 
-        const toolsMap = AGENT_TOOLS_MAP[_name];
-        if (toolsMap) {
-          const existingTools =
-            (agent.tools as Record<string, unknown> | undefined) ?? {};
-          agent.tools = {
-            ...existingTools,
-            ...toolsMap,
-          };
+        if (isAgentName(name)) {
+          agent.tools = mergeTools(
+            agent.tools as Record<string, unknown> | undefined,
+            getAgentToolDefaults(name),
+          );
         }
       }
     },
@@ -379,11 +433,6 @@ const KunweiPlugin: Plugin = async (ctx) => {
       await capitalsContextHook.handleSystemTransform(input, output);
     },
 
-    'tool.execute.before': async (
-      _input: { tool: string; callID: string },
-      _output: { args?: Record<string, unknown> },
-    ): Promise<void> => { },
-
     'tool.execute.after': async (
       input: { tool: string; callID: string },
       output: {
@@ -392,7 +441,7 @@ const KunweiPlugin: Plugin = async (ctx) => {
         metadata?: Record<string, unknown>;
       },
     ): Promise<void> => {
-      await (syntaxCheckHook as { 'tool.execute.after': (input: { tool: string; callID: string }, output: { output?: unknown; title?: string; metadata?: Record<string, unknown> }) => Promise<void> })['tool.execute.after'](input, output);
+      await syntaxCheckHook['tool.execute.after'](input, output);
     },
 
     'command.execute.before': async (

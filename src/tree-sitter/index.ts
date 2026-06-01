@@ -10,16 +10,11 @@ import path from 'node:path';
 import type { PluginInput } from '@opencode-ai/plugin';
 import { checkSyntax } from './checker';
 
-
-
 const FILE_EDIT_TOOLS = new Set(['edit', 'Write', 'write', 'ast_grep_replace']);
-
 const SYNTAX_CHECK_MARKER = '[syntax-check]';
 
 interface ToolExecuteAfterInput {
   tool: string;
-  sessionID?: string;
-  callID?: string;
   args?: {
     path?: string;
     file_path?: string;
@@ -29,9 +24,7 @@ interface ToolExecuteAfterInput {
 }
 
 interface ToolExecuteAfterOutput {
-  title?: string;
   output?: unknown;
-  metadata?: unknown;
 }
 
 function extractFilePath(args: ToolExecuteAfterInput['args']): string | null {
@@ -42,7 +35,7 @@ function extractFilePath(args: ToolExecuteAfterInput['args']): string | null {
     : null;
 }
 
-export function createSyntaxCheckHook(_ctx: PluginInput) {
+export function createSyntaxCheckHook(ctx: PluginInput) {
   return {
     'tool.execute.after': async (
       input: ToolExecuteAfterInput,
@@ -55,22 +48,19 @@ export function createSyntaxCheckHook(_ctx: PluginInput) {
       const filePath = extractFilePath(input.args);
       if (!filePath) return;
 
-      const resolvedPath = path.resolve(_ctx.directory, filePath);
       let content: string;
       try {
-        content = await fs.readFile(resolvedPath, 'utf-8');
+        content = await fs.readFile(path.resolve(ctx.directory, filePath), 'utf-8');
       } catch {
         return;
       }
 
       const result = await checkSyntax(content, filePath);
-      if (!result.ok) return;
-
-      if (result.errors.length === 0) return;
+      if (!result.ok || result.errors.length === 0) return;
 
       const lines = [
         '',
-        `${SYNTAX_CHECK_MARKER}`,
+        SYNTAX_CHECK_MARKER,
         `${result.errors.length} syntax issue(s) in ${filePath} (${result.lang}):`,
         ...result.errors.map(
           (e) =>
@@ -78,9 +68,6 @@ export function createSyntaxCheckHook(_ctx: PluginInput) {
         ),
       ];
       output.output += lines.join('\n');
-
-
-
     },
   };
 }

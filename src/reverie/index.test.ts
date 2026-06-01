@@ -1,4 +1,7 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createReverieTool, getReverieConfig } from './index';
 
 describe('getReverieConfig', () => {
@@ -100,5 +103,71 @@ describe('createReverieTool', () => {
     expect(texts.some((t: string) => t.includes('=== src/lib.ts ==='))).toBe(
       true,
     );
+  });
+});
+
+describe('reverie path sandbox', () => {
+  let projectDir: string;
+  let outsideDir: string;
+
+  function mockCtx(directory: string) {
+    return {
+      directory,
+      client: {
+        session: {
+          create: mock(async () => ({ data: { id: 'reverie-sandbox-1' } })),
+          prompt: mock(async () => ({})),
+          messages: mock(async () => ({ data: [] })),
+          abort: mock(async () => ({})),
+        },
+      },
+    } as any;
+  }
+
+  beforeEach(() => {
+    projectDir = mkdtempSync(join(tmpdir(), 'reverie-proj-'));
+    outsideDir = mkdtempSync(join(tmpdir(), 'reverie-out-'));
+    mkdirSync(join(projectDir, 'src'), { recursive: true });
+    writeFileSync(join(projectDir, 'src', 'safe.ts'), 'safe content');
+    writeFileSync(join(outsideDir, 'secret.txt'), 'TOP SECRET');
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  test('rejects files outside project directory', async () => {
+    const ctx = mockCtx(projectDir);
+    const reverie = createReverieTool(ctx);
+    await reverie.execute(
+      {
+        intent: 'review',
+        files: [`${outsideDir}/secret.txt`],
+      },
+      {} as any,
+    );
+    const promptArg = ctx.client.session.prompt.mock.calls[0][0];
+    const texts = promptArg.body.parts
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text)
+      .join('\n');
+    expect(texts).toContain('outside project directory');
+    expect(texts).not.toContain('TOP SECRET');
+  });
+
+  test('accepts files inside project directory', async () => {
+    const ctx = mockCtx(projectDir);
+    const reverie = createReverieTool(ctx);
+    await reverie.execute(
+      { intent: 'review', files: ['src/safe.ts'] },
+      {} as any,
+    );
+    const promptArg = ctx.client.session.prompt.mock.calls[0][0];
+    const texts = promptArg.body.parts
+      .filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text)
+      .join('\n');
+    expect(texts).toContain('safe content');
   });
 });

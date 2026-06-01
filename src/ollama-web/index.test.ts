@@ -1,14 +1,22 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { createOllamaWebFetchTool, createOllamaWebSearchTool } from './index';
 
+mock.module('./key', () => ({
+  OLLAMA_API_KEY: process.env.OLLAMA_API_KEY ?? '',
+}));
+
+const originalApiKey = process.env.OLLAMA_API_KEY;
+
 beforeEach(() => {
-  mock.module('./key', () => ({
-    OLLAMA_API_KEY: 'test-api-key',
-  }));
+  process.env.OLLAMA_API_KEY = 'test-api-key';
 });
 
 afterEach(() => {
-  mock.restore();
+  if (originalApiKey === undefined) {
+    delete process.env.OLLAMA_API_KEY;
+  } else {
+    process.env.OLLAMA_API_KEY = originalApiKey;
+  }
 });
 
 describe('createOllamaWebFetchTool', () => {

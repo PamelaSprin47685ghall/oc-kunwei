@@ -6,6 +6,8 @@ const CAPS_DIR_RE = /^[A-Z][A-Z0-9_]*$/;
 const EXCLUDED_FILE_NAMES = new Set(['AGENTS.md', 'CLAUDE.md', 'README.md']);
 const EXCLUDED_DIR_NAMES = new Set(['AGENTS', 'CLAUDE', 'NODE_MODULES']);
 const MAX_FILE_SIZE = 1_048_576;
+const MAX_TOTAL_CONTEXT_BYTES = 8 * 1_048_576;
+const MAX_DIR_DEPTH = 6;
 
 export interface CapsFileInfo {
   filePath: string;
@@ -17,6 +19,7 @@ export async function findCapsFiles(
   projectRoot: string,
 ): Promise<CapsFileInfo[]> {
   const results: CapsFileInfo[] = [];
+  let totalBytes = 0;
 
   let rootEntries: import('node:fs').Dirent[];
   try {
@@ -34,7 +37,11 @@ export async function findCapsFiles(
       !EXCLUDED_FILE_NAMES.has(entry.name)
     ) {
       const info = await tryReadFile(fullPath, entry.name);
-      if (info) results.push(info);
+      if (info) {
+        if (totalBytes + info.content.length > MAX_TOTAL_CONTEXT_BYTES) break;
+        totalBytes += info.content.length;
+        results.push(info);
+      }
     }
 
     if (
@@ -42,13 +49,18 @@ export async function findCapsFiles(
       CAPS_DIR_RE.test(entry.name) &&
       !EXCLUDED_DIR_NAMES.has(entry.name)
     ) {
-      const dirFiles = await discoverFilesInDir(fullPath);
+      const dirFiles: string[] = [];
+      await discoverFilesInDir(fullPath, dirFiles, 0);
       for (const filePath of dirFiles) {
         const info = await tryReadFile(
           filePath,
           path.relative(projectRoot, filePath),
         );
-        if (info) results.push(info);
+        if (info) {
+          if (totalBytes + info.content.length > MAX_TOTAL_CONTEXT_BYTES) break;
+          totalBytes += info.content.length;
+          results.push(info);
+        }
       }
     }
   }
@@ -73,22 +85,26 @@ async function tryReadFile(
   }
 }
 
-async function discoverFilesInDir(dirPath: string): Promise<string[]> {
-  const files: string[] = [];
+async function discoverFilesInDir(
+  dirPath: string,
+  out: string[],
+  depth: number,
+): Promise<void> {
+  if (depth >= MAX_DIR_DEPTH) return;
+  let entries: import('node:fs').Dirent[];
   try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-      if (entry.isFile()) {
-        files.push(fullPath);
-      } else if (entry.isDirectory()) {
-        files.push(...(await discoverFilesInDir(fullPath)));
-      }
-    }
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
   } catch {
-    // skip unreadable directories
+    return;
   }
-  return files;
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isFile()) {
+      out.push(fullPath);
+    } else if (entry.isDirectory()) {
+      await discoverFilesInDir(fullPath, out, depth + 1);
+    }
+  }
 }
 
 export async function buildCapitalsContext(

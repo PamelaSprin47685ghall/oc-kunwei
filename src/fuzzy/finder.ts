@@ -1,16 +1,11 @@
 import type { FileFinder } from '@ff-labs/fff-node';
 
-// Lazy loader — avoids CJS require() of ESM-only package (@ff-labs/fff-node has no "require" export)
-// Uses Function constructor so TypeScript CJS compilation doesn't transform import() to require()
-let fffModule: { FileFinder: typeof FileFinder } | null = null;
-const fffImport = new Function('spec', 'return import(spec)') as (
-  spec: string,
-) => Promise<typeof import('@ff-labs/fff-node')>;
-async function getFffModule(): Promise<{ FileFinder: typeof FileFinder }> {
+type FffModule = typeof import('@ff-labs/fff-node');
+
+let fffModule: FffModule | null = null;
+async function getFffModule(): Promise<FffModule> {
   if (!fffModule) {
-    fffModule = (await fffImport('@ff-labs/fff-node')) as {
-      FileFinder: typeof FileFinder;
-    };
+    fffModule = await import('@ff-labs/fff-node');
   }
   return fffModule;
 }

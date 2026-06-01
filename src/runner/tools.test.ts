@@ -167,13 +167,11 @@ describe('Runner Tools', () => {
   });
 
   describe('wait', () => {
-    it('should throw if no active job', async () => {
-      try {
-        await wait({ sessionId: 'nonexistent', ms: 1000 });
-        expect(true).toBe(false);
-      } catch (error) {
-        expect((error as Error).message).toContain('No active job found');
-      }
+    it('returns completed result with empty output if no active job', async () => {
+      const result = await wait({ sessionId: 'nonexistent', ms: 1000 });
+      expect(result.completed).toBe(true);
+      expect(result.output).toBe('');
+      expect(result.message).toContain('No active job');
     });
 
     it('should wait and return output for background task', async () => {

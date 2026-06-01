@@ -18,7 +18,9 @@ export function createEditorTool(ctx: PluginInput): ToolDefinition {
     args: {
       intent: tool.schema
         .string()
-        .describe('A natural-language intent describing the desired code changes. Must include all relevant background, design rationale, file paths, and specific requirements. Do not assume the agent knows anything about the project context.'),
+        .describe(
+          'A natural-language intent describing the desired code changes. Must include all relevant background, design rationale, file paths, and specific requirements. Do not assume the agent knows anything about the project context.',
+        ),
     },
 
     async execute(args, context) {

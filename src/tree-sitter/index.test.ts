@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,7 @@ import type { PluginInput } from '@opencode-ai/plugin';
 
 import * as checkerModule from './checker';
 import { createSyntaxCheckHook } from './index';
+import { checkSyntax } from './checker';
 
 function mockCheckSyntax(errors: checkerModule.SyntaxError[]) {
   spyOn(checkerModule, 'checkSyntax').mockResolvedValue({
@@ -47,6 +48,7 @@ describe('createSyntaxCheckHook', () => {
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
+    mock.restore();
   });
 
   it('appends syntax errors to edit tool output', async () => {
@@ -232,5 +234,24 @@ describe('createSyntaxCheckHook', () => {
       out2,
     );
     expect(out2.output).toContain('syntax issue(s)');
+  });
+});
+
+describe('checkSyntax error path', () => {
+  it('returns ok:false for unsupported language', async () => {
+    const result = await checkSyntax('content', '/tmp/file.unknown_ext');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain('unsupported language');
+    }
+  });
+
+  it('returns ok:true with empty errors for valid typescript', async () => {
+    const result = await checkSyntax('const x: number = 1;\n', '/tmp/test.ts');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.errors).toEqual([]);
+      expect(result.lang).toBeTruthy();
+    }
   });
 });
